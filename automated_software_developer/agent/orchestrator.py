@@ -8,6 +8,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from automated_software_developer.agent.agile.backlog import build_backlog
+from automated_software_developer.agent.agile.ceremonies import (
+    run_retrospective,
+    run_sprint_planning,
+    write_retrospective,
+)
+from automated_software_developer.agent.agile.metrics import MetricsStore
+from automated_software_developer.agent.agile.sprint_engine import SprintConfig
 from automated_software_developer.agent.architecture import (
     ArchitectureArtifacts,
     ArchitecturePlanner,
@@ -178,6 +186,55 @@ class SoftwareDevelopmentAgent:
         )
         workspace.write_file(self.config.refined_spec_file, refined.to_markdown())
         return refined
+
+    def run_scrum_cycle(self, requirements: str, output_dir: Path) -> dict[str, Path]:
+        """Run requirements refinement, backlog generation, and sprint planning."""
+        if not requirements.strip():
+            raise ValueError("requirements must be non-empty.")
+        prompt_seed = self.config.prompt_seed_base if self.config.reproducible else None
+        workspace = FileWorkspace(output_dir)
+        workspace.ensure_exists()
+        self._ensure_agents_md(workspace)
+        ensure_repository_scaffold(workspace)
+        repo_guidelines = workspace.read_optional("AGENTS.md")
+
+        refinement_template = self.pattern_store.load_latest(REFINEMENT_TEMPLATE_ID)
+        refined = self.refiner.refine(
+            requirements=requirements,
+            repo_guidelines=repo_guidelines,
+            template=refinement_template,
+            seed=prompt_seed,
+        )
+        workspace.write_file(self.config.refined_spec_file, refined.to_markdown())
+
+        backlog = build_backlog(refined)
+        backlog_path = output_dir / self.config.backlog_file
+        backlog_path.parent.mkdir(parents=True, exist_ok=True)
+        backlog_path.write_text(json.dumps(backlog.to_dict(), indent=2), encoding="utf-8")
+
+        metrics_store = MetricsStore(path=output_dir / ".autosd" / "metrics.json")
+        sprint_plan = run_sprint_planning(backlog, metrics_store, config=SprintConfig())
+        sprint_dir = output_dir / ".autosd" / "sprints" / sprint_plan.sprint_id
+        sprint_dir.mkdir(parents=True, exist_ok=True)
+        sprint_plan_path = sprint_dir / "sprint_plan.json"
+        sprint_plan_path.write_text(
+            json.dumps(sprint_plan.to_dict(), indent=2), encoding="utf-8"
+        )
+
+        retrospective_md = run_retrospective(sprint_plan, metrics_store)
+        retrospective_path = write_retrospective(
+            retrospective_md,
+            output_dir=output_dir / ".autosd" / "retrospectives",
+            sprint_id=sprint_plan.sprint_id,
+        )
+        metrics_store.save()
+        return {
+            "refined_requirements": output_dir / self.config.refined_spec_file,
+            "backlog": backlog_path,
+            "sprint_plan": sprint_plan_path,
+            "retrospective": retrospective_path,
+            "metrics": metrics_store.path,
+        }
 
     def run(self, requirements: str, output_dir: Path) -> RunSummary:
         """Execute the full refine -> backlog sprint -> verify workflow."""

@@ -79,6 +79,19 @@ Useful `run` flags:
 - `--security-scan --security-scan-mode off|if-available|required`
 - `--gitops-enable --gitops-auto-push --gitops-tag-release`
 
+### Scrum Backlog & Sprint Automation
+
+```bash
+autosd backlog refine --requirements-file requirements.md --output-dir output/project
+autosd sprint plan --backlog-path output/project/.autosd/backlog.json
+autosd sprint start --sprint-plan-path output/project/.autosd/sprints/<id>/sprint_plan.json
+autosd sprint review --backlog-path output/project/.autosd/backlog.json \\
+  --sprint-plan-path output/project/.autosd/sprints/<id>/sprint_plan.json
+autosd sprint retro --sprint-plan-path output/project/.autosd/sprints/<id>/sprint_plan.json
+autosd sprint metrics --metrics-path output/project/.autosd/metrics.json
+autosd sprint run --requirements-file requirements.md --output-dir output/project
+```
+
 ### Portfolio / Dashboard
 
 ```bash
