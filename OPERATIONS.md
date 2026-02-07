@@ -95,3 +95,14 @@ python -m ruff check .
 python -m mypy automated_software_developer
 python -m pytest
 ```
+
+## Factory Release Gate
+
+Run the full generator + conformance gate in one step:
+
+```bash
+autosd verify-factory
+```
+
+The report is written to `conformance/report.json`. Use `--verbose` for additional
+debug logging in `autosd.log`.

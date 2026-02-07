@@ -1,0 +1,130 @@
+[
+  {
+    "project_name": "Web App Fixture",
+    "product_brief": "Create a web app frontend with a static page and helper loader.",
+    "personas": [
+      "Web user"
+    ],
+    "stories": [
+      {
+        "id": "web-1",
+        "title": "Create web app scaffold",
+        "story": "As a web user, I want a web app scaffold so that I can view a static page.",
+        "acceptance_criteria": [
+          "README.md contains Install",
+          "README.md contains Run",
+          "frontend/index.html exists"
+        ],
+        "nfr_tags": [
+          "reliability",
+          "ux_accessibility"
+        ],
+        "dependencies": [],
+        "verification_commands": [
+          "python -m pytest -q"
+        ]
+      }
+    ],
+    "nfrs": {
+      "security": [
+        "No secrets in source."
+      ],
+      "privacy": [
+        "No telemetry by default."
+      ],
+      "performance": [],
+      "reliability": [
+        "Static page loads."
+      ],
+      "observability": [],
+      "ux_accessibility": [
+        "Page includes a heading."
+      ],
+      "compliance": []
+    },
+    "ambiguities": [],
+    "contradictions": [],
+    "missing_constraints": [],
+    "edge_cases": [],
+    "external_dependencies": [],
+    "assumptions": [
+      {
+        "assumption": "Static HTML page is sufficient for the fixture.",
+        "testable_criterion": "Given index.html, when read, then it contains Web App Fixture."
+      }
+    ],
+    "stack_rationale": "Python + static assets keeps the web app lightweight.",
+    "global_verification_commands": [
+      "python -m pytest -q"
+    ]
+  },
+  {
+    "overview": "Static web app scaffold with a loader helper.",
+    "components": [
+      {
+        "id": "frontend",
+        "name": "Frontend Assets",
+        "responsibilities": [
+          "Serve static HTML"
+        ],
+        "interfaces": [
+          "filesystem"
+        ],
+        "dependencies": []
+      }
+    ],
+    "adrs": [
+      {
+        "id": "ADR-001",
+        "title": "Use static HTML for the fixture",
+        "status": "accepted",
+        "context": "Keep the fixture deterministic.",
+        "decision": "Include static HTML and a helper loader.",
+        "consequences": [
+          "No frontend build toolchain required."
+        ]
+      }
+    ]
+  },
+  {
+    "summary": "Scaffold web app fixture",
+    "operations": [
+      {
+        "op": "write_file",
+        "path": "README.md",
+        "content": "# Web App Fixture\n\n## Install\n\n```bash\npython -m pip install -e .[dev]\n```\n\n## Run\n\n```bash\npython -m web_app_fixture.app\n```\n"
+      },
+      {
+        "op": "write_file",
+        "path": "pyproject.toml",
+        "content": "[build-system]\nrequires = [\"setuptools>=69\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"web-app-fixture\"\nversion = \"0.1.0\"\ndescription = \"Minimal web app fixture\"\nrequires-python = \">=3.11\"\ndependencies = []\n\n[project.optional-dependencies]\ndev = [\"pytest==8.2.0\", \"ruff==0.5.0\", \"mypy==1.10.0\", \"build==1.2.1\"]\n\n[tool.setuptools]\npackage-dir = {\"\" = \"src\"}\n\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\n\n[tool.ruff]\nline-length = 100\ntarget-version = \"py311\"\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"I\", \"B\", \"UP\", \"N\"]\n\n[tool.pytest.ini_options]\npythonpath = [\"src\"]\n"
+      },
+      {
+        "op": "write_file",
+        "path": "requirements.txt",
+        "content": "# Pinned requirements for reproducible builds\n"
+      },
+      {
+        "op": "write_file",
+        "path": "src/web_app_fixture/__init__.py",
+        "content": "\"\"\"Web app fixture package.\"\"\"\n"
+      },
+      {
+        "op": "write_file",
+        "path": "src/web_app_fixture/app.py",
+        "content": "\"\"\"Helper for loading static HTML assets.\"\"\"\n\nfrom __future__ import annotations\n\nfrom pathlib import Path\n\n\ndef load_index(path: Path | None = None) -> str:\n    \"\"\"Load the static index HTML content.\"\"\"\n    target = path or Path(__file__).resolve().parents[2] / \"frontend\" / \"index.html\"\n    return target.read_text(encoding=\"utf-8\")\n\n\nif __name__ == \"__main__\":\n    print(load_index())\n"
+      },
+      {
+        "op": "write_file",
+        "path": "frontend/index.html",
+        "content": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\" />\n    <title>Web App Fixture</title>\n  </head>\n  <body>\n    <h1>Web App Fixture</h1>\n    <p>Static page scaffold.</p>\n  </body>\n</html>\n"
+      },
+      {
+        "op": "write_file",
+        "path": "tests/test_web_app.py",
+        "content": "\"\"\"Tests for the web app fixture.\"\"\"\n\nfrom web_app_fixture.app import load_index\n\n\ndef test_load_index_contains_heading() -> None:\n    \"\"\"Ensure the static HTML includes the heading.\"\"\"\n    assert \"Web App Fixture\" in load_index()\n"
+      }
+    ],
+    "verification_commands": []
+  }
+]
