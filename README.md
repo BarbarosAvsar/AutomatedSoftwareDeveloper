@@ -115,6 +115,23 @@ Implemented targets:
 - `github_pages`
 - `generic_container`
 
+### Release Bundles
+
+```bash
+autosd release --project <id> --version 1.2.3 --tag v1.2.3
+```
+
+Release artifacts are stored under `.autosd/releases/` within each project.
+
+### Daemon Mode (Zero Interaction)
+
+```bash
+autosd daemon --requirements-dir requirements --projects-dir projects --max-cycles 1
+```
+
+Daemon mode watches for requirement files and runs the full company workflow
+in a non-interactive loop (policy-gated). Use `--max-cycles 0` for continuous operation.
+
 ### Telemetry (privacy-safe)
 
 Telemetry is OFF by default.
