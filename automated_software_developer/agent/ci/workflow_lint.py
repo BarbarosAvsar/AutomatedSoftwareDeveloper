@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-import yaml  # type: ignore[import-untyped]
+import yaml  # type: ignore[import-untyped,unused-ignore]
 
 
 class DuplicateKeyError(ValueError):
@@ -19,7 +19,7 @@ class DuplicateKeyError(ValueError):
         self.key = key
 
 
-class UniqueKeyLoader(yaml.SafeLoader):  # type: ignore[misc]
+class UniqueKeyLoader(yaml.SafeLoader):  # type: ignore[misc,unused-ignore]
     """YAML loader that rejects duplicate keys."""
 
     def _construct_object(self, node: Any, deep: bool = False) -> Any:
