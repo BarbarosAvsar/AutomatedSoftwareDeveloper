@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+.glow {
+  box-shadow: 0 0 25px rgba(124, 92, 255, 0.35);
+}

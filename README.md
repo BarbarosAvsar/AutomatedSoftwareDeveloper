@@ -23,6 +23,25 @@ autosd --version
 tail -f autosd.log
 ```
 
+## Autonomous Engineering Console (UI)
+
+The UI is a first-class, chat-first web console that exposes the full autonomous
+workflow. The CLI remains fully supported.
+
+Backend API (FastAPI):
+
+```bash
+python -m uvicorn ui.backend.app:app --reload --port 8080
+```
+
+Frontend (Vite + React):
+
+```bash
+cd ui/frontend
+npm install
+npm run dev
+```
+
 ## Security Posture
 
 This system is **risk-reduced and hardened** (not guaranteed secure). It enforces:
