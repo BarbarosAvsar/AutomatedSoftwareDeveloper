@@ -6,7 +6,7 @@ import re
 from collections.abc import Hashable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml  # type: ignore[import-untyped]
 
@@ -22,13 +22,16 @@ class DuplicateKeyError(ValueError):
 class UniqueKeyLoader(yaml.SafeLoader):  # type: ignore[misc]
     """YAML loader that rejects duplicate keys."""
 
+    def _construct_object(self, node: Any, deep: bool = False) -> Any:
+        return cast(Any, super()).construct_object(node, deep=deep)
+
     def construct_mapping(self, node: Any, deep: bool = False) -> dict[Hashable, Any]:
         mapping: dict[Hashable, Any] = {}
         for key_node, value_node in node.value:
-            key = self.construct_object(key_node, deep=deep)
+            key = self._construct_object(key_node, deep=deep)
             if key in mapping:
                 raise DuplicateKeyError(str(key))
-            mapping[key] = self.construct_object(value_node, deep=deep)
+            mapping[key] = self._construct_object(value_node, deep=deep)
         return mapping
 
 
