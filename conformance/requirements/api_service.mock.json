@@ -1,0 +1,124 @@
+[
+  {
+    "project_name": "API Service Fixture",
+    "product_brief": "Create a minimal REST API service for health checks.",
+    "personas": [
+      "API consumer"
+    ],
+    "stories": [
+      {
+        "id": "api-1",
+        "title": "Create API service scaffold",
+        "story": "As an API consumer, I want a REST API service scaffold so that I can validate health responses.",
+        "acceptance_criteria": [
+          "README.md contains Install",
+          "README.md contains Run",
+          "src/api_service_fixture/app.py exists"
+        ],
+        "nfr_tags": [
+          "reliability",
+          "security"
+        ],
+        "dependencies": [],
+        "verification_commands": [
+          "python -m pytest -q"
+        ]
+      }
+    ],
+    "nfrs": {
+      "security": [
+        "Do not store secrets in the repository."
+      ],
+      "privacy": [
+        "No telemetry by default."
+      ],
+      "performance": [],
+      "reliability": [
+        "Health check returns ok."
+      ],
+      "observability": [],
+      "ux_accessibility": [],
+      "compliance": []
+    },
+    "ambiguities": [],
+    "contradictions": [],
+    "missing_constraints": [],
+    "edge_cases": [],
+    "external_dependencies": [],
+    "assumptions": [
+      {
+        "assumption": "Service returns ok for health check.",
+        "testable_criterion": "Given a status check, when get_status runs, then it returns ok."
+      }
+    ],
+    "stack_rationale": "Python standard library keeps the API service minimal.",
+    "global_verification_commands": [
+      "python -m pytest -q"
+    ]
+  },
+  {
+    "overview": "Minimal API service with a health response function.",
+    "components": [
+      {
+        "id": "core",
+        "name": "Core Service",
+        "responsibilities": [
+          "Provide status response",
+          "Expose health handler"
+        ],
+        "interfaces": [
+          "function"
+        ],
+        "dependencies": []
+      }
+    ],
+    "adrs": [
+      {
+        "id": "ADR-001",
+        "title": "Use standard library for health checks",
+        "status": "accepted",
+        "context": "Keep the fixture lightweight.",
+        "decision": "Use simple functions without external web frameworks.",
+        "consequences": [
+          "No runtime dependencies required."
+        ]
+      }
+    ]
+  },
+  {
+    "summary": "Scaffold API service fixture",
+    "operations": [
+      {
+        "op": "write_file",
+        "path": "README.md",
+        "content": "# API Service Fixture\n\n## Install\n\n```bash\npython -m pip install -e .[dev]\n```\n\n## Run\n\n```bash\npython -m api_service_fixture.app\n```\n"
+      },
+      {
+        "op": "write_file",
+        "path": "pyproject.toml",
+        "content": "[build-system]\nrequires = [\"setuptools>=69\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"api-service-fixture\"\nversion = \"0.1.0\"\ndescription = \"Minimal API service fixture\"\nrequires-python = \">=3.11\"\ndependencies = []\n\n[project.optional-dependencies]\ndev = [\"pytest==8.2.0\", \"ruff==0.5.0\", \"mypy==1.10.0\", \"build==1.2.1\"]\n\n[tool.setuptools]\npackage-dir = {\"\" = \"src\"}\n\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\n\n[tool.ruff]\nline-length = 100\ntarget-version = \"py311\"\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"I\", \"B\", \"UP\", \"N\"]\n\n[tool.pytest.ini_options]\npythonpath = [\"src\"]\n"
+      },
+      {
+        "op": "write_file",
+        "path": "requirements.txt",
+        "content": "# Pinned requirements for reproducible builds\n"
+      },
+      {
+        "op": "write_file",
+        "path": "src/api_service_fixture/__init__.py",
+        "content": "\"\"\"API service fixture package.\"\"\"\n"
+      },
+      {
+        "op": "write_file",
+        "path": "src/api_service_fixture/app.py",
+        "content": "\"\"\"Simple API service logic for health checks.\"\"\"\n\nfrom __future__ import annotations\n\n\ndef get_status() -> str:\n    \"\"\"Return a static health status string.\"\"\"\n    return \"ok\"\n\n\nif __name__ == \"__main__\":\n    print(get_status())\n"
+      },
+      {
+        "op": "write_file",
+        "path": "tests/test_api_service.py",
+        "content": "\"\"\"Tests for API service fixture.\"\"\"\n\nfrom api_service_fixture.app import get_status\n\n\ndef test_get_status() -> None:\n    \"\"\"Ensure the status function returns ok.\"\"\"\n    assert get_status() == \"ok\"\n"
+      }
+    ],
+    "verification_commands": []
+  }
+]

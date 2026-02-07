@@ -94,9 +94,19 @@ Useful `run` flags:
 - `--preferred-platform web_app|api_service|cli_tool|desktop_app|mobile_app`
 - `--execute-packaging/--plan-packaging`
 - `--reproducible/--non-reproducible`
+- `--conformance-seed <int>`
 - `--sbom-mode off|if-available|required`
 - `--security-scan --security-scan-mode off|if-available|required`
 - `--gitops-enable --gitops-auto-push --gitops-tag-release`
+
+### Factory Verification
+
+```bash
+autosd verify-factory
+```
+
+This runs repository quality gates and the conformance suite, producing
+`conformance/report.json` and failing fast if any generated project gate fails.
 
 ### Scrum Backlog & Sprint Automation
 

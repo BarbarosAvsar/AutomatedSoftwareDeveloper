@@ -1,0 +1,123 @@
+[
+  {
+    "project_name": "CLI Tool Fixture",
+    "product_brief": "Create a CLI tool for terminal automation and greetings.",
+    "personas": [
+      "Operator"
+    ],
+    "stories": [
+      {
+        "id": "cli-1",
+        "title": "Create CLI scaffold",
+        "story": "As an operator, I want a CLI tool so that I can run a greeting command in the terminal.",
+        "acceptance_criteria": [
+          "README.md contains Install",
+          "README.md contains Run",
+          "src/cli_tool_fixture/cli.py exists"
+        ],
+        "nfr_tags": [
+          "reliability"
+        ],
+        "dependencies": [],
+        "verification_commands": [
+          "python -m pytest -q"
+        ]
+      }
+    ],
+    "nfrs": {
+      "security": [
+        "No secrets or tokens are stored."
+      ],
+      "privacy": [
+        "No telemetry output."
+      ],
+      "performance": [],
+      "reliability": [
+        "Greeting command returns expected output."
+      ],
+      "observability": [],
+      "ux_accessibility": [],
+      "compliance": []
+    },
+    "ambiguities": [],
+    "contradictions": [],
+    "missing_constraints": [],
+    "edge_cases": [],
+    "external_dependencies": [],
+    "assumptions": [
+      {
+        "assumption": "CLI uses standard library only.",
+        "testable_criterion": "Given run_cli, when args are empty, then output contains hello."
+      }
+    ],
+    "stack_rationale": "Python standard library CLI keeps dependencies minimal.",
+    "global_verification_commands": [
+      "python -m pytest -q"
+    ]
+  },
+  {
+    "overview": "CLI tool with a greeting command.",
+    "components": [
+      {
+        "id": "cli",
+        "name": "CLI Entry",
+        "responsibilities": [
+          "Parse arguments",
+          "Return greeting"
+        ],
+        "interfaces": [
+          "command-line"
+        ],
+        "dependencies": []
+      }
+    ],
+    "adrs": [
+      {
+        "id": "ADR-001",
+        "title": "Use argparse for CLI parsing",
+        "status": "accepted",
+        "context": "Need a minimal CLI interface.",
+        "decision": "Use argparse from the standard library.",
+        "consequences": [
+          "No external CLI dependencies."
+        ]
+      }
+    ]
+  },
+  {
+    "summary": "Scaffold CLI tool fixture",
+    "operations": [
+      {
+        "op": "write_file",
+        "path": "README.md",
+        "content": "# CLI Tool Fixture\n\n## Install\n\n```bash\npython -m pip install -e .[dev]\n```\n\n## Run\n\n```bash\npython -m cli_tool_fixture.cli\n```\n"
+      },
+      {
+        "op": "write_file",
+        "path": "pyproject.toml",
+        "content": "[build-system]\nrequires = [\"setuptools>=69\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"cli-tool-fixture\"\nversion = \"0.1.0\"\ndescription = \"Minimal CLI tool fixture\"\nrequires-python = \">=3.11\"\ndependencies = []\n\n[project.optional-dependencies]\ndev = [\"pytest==8.2.0\", \"ruff==0.5.0\", \"mypy==1.10.0\", \"build==1.2.1\"]\n\n[tool.setuptools]\npackage-dir = {\"\" = \"src\"}\n\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\n\n[tool.ruff]\nline-length = 100\ntarget-version = \"py311\"\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"I\", \"B\", \"UP\", \"N\"]\n\n[tool.pytest.ini_options]\npythonpath = [\"src\"]\n"
+      },
+      {
+        "op": "write_file",
+        "path": "requirements.txt",
+        "content": "# Pinned requirements for reproducible builds\n"
+      },
+      {
+        "op": "write_file",
+        "path": "src/cli_tool_fixture/__init__.py",
+        "content": "\"\"\"CLI tool fixture package.\"\"\"\n"
+      },
+      {
+        "op": "write_file",
+        "path": "src/cli_tool_fixture/cli.py",
+        "content": "\"\"\"CLI entrypoint for greeting users.\"\"\"\n\nfrom __future__ import annotations\n\nimport argparse\nfrom collections.abc import Sequence\n\n\ndef run_cli(args: Sequence[str] | None = None) -> str:\n    \"\"\"Return greeting output based on provided args.\"\"\"\n    parser = argparse.ArgumentParser(prog=\"cli-tool-fixture\")\n    parser.add_argument(\"--name\", default=\"world\")\n    parsed = parser.parse_args(args=args)\n    return f\"hello {parsed.name}\"\n\n\ndef main() -> None:\n    \"\"\"Execute the CLI entrypoint.\"\"\"\n    print(run_cli())\n\n\nif __name__ == \"__main__\":\n    main()\n"
+      },
+      {
+        "op": "write_file",
+        "path": "tests/test_cli_tool.py",
+        "content": "\"\"\"Tests for the CLI tool fixture.\"\"\"\n\nfrom cli_tool_fixture.cli import run_cli\n\n\ndef test_run_cli_default() -> None:\n    \"\"\"Ensure the CLI returns the default greeting.\"\"\"\n    assert run_cli([]) == \"hello world\"\n"
+      }
+    ],
+    "verification_commands": []
+  }
+]

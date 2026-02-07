@@ -326,7 +326,7 @@ class SoftwareDevelopmentAgent:
                 self._append_sprint_log(
                     workspace=workspace,
                     payload={
-                        "timestamp": _utc_now(),
+                        "timestamp": self._now(),
                         "sprint_index": sprint_index,
                         "story_id": story.story_id,
                         "event": "story_started",
@@ -365,7 +365,7 @@ class SoftwareDevelopmentAgent:
                 self._append_sprint_log(
                     workspace=workspace,
                     payload={
-                        "timestamp": _utc_now(),
+                        "timestamp": self._now(),
                         "sprint_index": sprint_index,
                         "story_id": story.story_id,
                         "event": (
@@ -617,7 +617,7 @@ class SoftwareDevelopmentAgent:
 
             journal.append(
                 {
-                    "timestamp": _utc_now(),
+                    "timestamp": self._now(),
                     "phase": "story_execution",
                     "template_id": template.template_id,
                     "template_version": template.version,
@@ -671,7 +671,7 @@ class SoftwareDevelopmentAgent:
         """Write a refinement completion entry to prompt journal."""
         journal.append(
             {
-                "timestamp": _utc_now(),
+                "timestamp": self._now(),
                 "phase": "requirements_refinement",
                 "template_id": template.template_id,
                 "template_version": template.version,
@@ -835,10 +835,11 @@ class SoftwareDevelopmentAgent:
         for path in [artifacts.architecture_doc, artifacts.components_json, *artifacts.adr_files]:
             workspace.changed_files.add(str(path.relative_to(root)).replace("\\", "/"))
 
-
-def _utc_now() -> str:
-    """Return current UTC timestamp in ISO format."""
-    return datetime.now(tz=UTC).isoformat()
+    def _now(self) -> str:
+        """Return deterministic timestamp when reproducible mode is enabled."""
+        if self.config.reproducible:
+            return "1970-01-01T00:00:00+00:00"
+        return datetime.now(tz=UTC).isoformat()
 
 
 def _dedupe_commands(commands: list[str]) -> list[str]:

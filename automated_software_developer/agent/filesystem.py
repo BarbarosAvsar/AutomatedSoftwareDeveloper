@@ -49,6 +49,14 @@ class FileWorkspace:
             return None
         return target.read_text(encoding="utf-8")
 
+    def set_executable(self, relative_path: str) -> None:
+        """Ensure a file under workspace root is marked executable."""
+        target = ensure_safe_relative_path(self.base_dir, relative_path)
+        if not target.exists() or not target.is_file():
+            raise SecurityError(f"Cannot mark missing file executable: {relative_path}")
+        mode = target.stat().st_mode
+        target.chmod(mode | 0o111)
+
     def list_files(self, max_files: int = 500) -> list[str]:
         """Return a sorted list of relative paths for non-hidden files."""
         files: list[str] = []

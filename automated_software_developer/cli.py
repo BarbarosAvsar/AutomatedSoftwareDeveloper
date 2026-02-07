@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import shlex
+import subprocess
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -35,6 +38,10 @@ from automated_software_developer.agent.agile.sprint_engine import (
     freeze_sprint,
 )
 from automated_software_developer.agent.audit import AuditLogger
+from automated_software_developer.agent.conformance.runner import (
+    ConformanceConfig,
+    run_conformance_suite,
+)
 from automated_software_developer.agent.daemon import CompanyDaemon, DaemonConfig
 from automated_software_developer.agent.departments.operations import ReleaseManager
 from automated_software_developer.agent.deploy import (
@@ -175,6 +182,14 @@ def _validate_sbom_mode(value: str) -> str:
     if value not in allowed:
         raise typer.BadParameter("sbom-mode must be one of: off, if-available, required.")
     return value
+
+
+def _run_gate_command(command: str) -> tuple[bool, float]:
+    """Run a shell command for gate enforcement and return success/duration."""
+    start = time.monotonic()
+    result = subprocess.run(shlex.split(command), check=False)
+    duration = time.monotonic() - start
+    return result.returncode == 0, duration
 
 
 def _create_registry(registry_path: Path | None) -> PortfolioRegistry:
@@ -431,6 +446,13 @@ def run(
             help="Enable reproducible mode metadata and deterministic build intent.",
         ),
     ] = False,
+    conformance_seed: Annotated[
+        int | None,
+        typer.Option(
+            "--conformance-seed",
+            help="Optional seed override for reproducible runs and conformance checks.",
+        ),
+    ] = None,
     sbom_mode: Annotated[
         str,
         typer.Option(help="SBOM behavior: off, if-available, required."),
@@ -471,6 +493,8 @@ def run(
     max_stories_per_sprint = _ensure_positive(max_stories_per_sprint, "max-stories-per-sprint")
     security_scan_mode = _validate_security_scan_mode(security_scan_mode)
     sbom_mode = _validate_sbom_mode(sbom_mode)
+    if conformance_seed is not None:
+        conformance_seed = _ensure_positive(conformance_seed, "conformance-seed")
     config = AgentConfig(
         max_task_attempts=max_task_attempts,
         command_timeout_seconds=timeout_seconds,
@@ -485,6 +509,9 @@ def run(
         execute_packaging=execute_packaging,
         reproducible=reproducible,
         sbom_mode=sbom_mode,
+        prompt_seed_base=conformance_seed
+        if conformance_seed is not None
+        else AgentConfig().prompt_seed_base,
     )
     agent = SoftwareDevelopmentAgent(provider=resolved_provider, config=config)
 
@@ -541,6 +568,79 @@ def run(
         console.print(f"- pushed: {git_result.pushed}")
         console.print(f"- pending_push: {git_result.pending_push}")
         console.print(f"- commit_sha: {git_result.commit_sha or '-'}")
+
+
+@app.command("verify-factory")
+def verify_factory(
+    conformance_seed: Annotated[
+        int,
+        typer.Option(
+            "--conformance-seed",
+            help="Seed for reproducible conformance generation runs.",
+        ),
+    ] = 4242,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            help="Directory to write generated conformance projects.",
+        ),
+    ] = Path("conformance/output"),
+    report_path: Annotated[
+        Path,
+        typer.Option(
+            "--report-path",
+            help="Path to write the conformance report JSON.",
+        ),
+    ] = Path("conformance/report.json"),
+    diff_check: Annotated[
+        bool,
+        typer.Option(
+            "--diff-check/--no-diff-check",
+            help="Generate fixtures twice and compare outputs for determinism.",
+        ),
+    ] = True,
+    skip_generator_gates: Annotated[
+        bool,
+        typer.Option(
+            "--skip-generator-gates/--run-generator-gates",
+            help="Skip repo-level ruff/mypy/pytest gates before conformance.",
+        ),
+    ] = False,
+    max_workers: Annotated[
+        int,
+        typer.Option(help="Parallel worker count for conformance fixtures."),
+    ] = 3,
+) -> None:
+    """Run generator and generated-project quality gates for release readiness."""
+    conformance_seed = _ensure_positive(conformance_seed, "conformance-seed")
+    max_workers = _ensure_positive(max_workers, "max-workers")
+    if not skip_generator_gates:
+        gates = [
+            "python -m ruff check .",
+            "python -m mypy automated_software_developer",
+            "python -m pytest",
+        ]
+        for command in gates:
+            passed, duration = _run_gate_command(command)
+            status = "PASS" if passed else "FAIL"
+            console.print(f"[{status}] {command} ({duration:.2f}s)")
+            if not passed:
+                raise typer.Exit(code=1)
+
+    report = run_conformance_suite(
+        config=ConformanceConfig(
+            output_dir=output_dir,
+            report_path=report_path,
+            conformance_seed=conformance_seed,
+            diff_check=diff_check,
+            max_workers=max_workers,
+        )
+    )
+    status = "PASS" if report.passed else "FAIL"
+    console.print(f"[{status}] Conformance suite complete. Report: {report_path}")
+    if not report.passed:
+        raise typer.Exit(code=1)
 
 
 @app.command()
