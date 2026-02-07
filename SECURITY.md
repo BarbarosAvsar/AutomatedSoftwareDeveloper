@@ -28,6 +28,8 @@ Use human review for high-impact releases.
 - Never commit secrets, private keys, or tokens.
 - Telemetry must not include PII/IP/user content.
 - Keep preauth private keys local (`~/.autosd/preauth/keys/private_key.pem`).
+- CI workflows must pin action versions and avoid printing environment variables or secrets.
+- CI permissions are least-privilege (explicit `permissions: { contents: read }` unless needed).
 
 ## Incident Response
 

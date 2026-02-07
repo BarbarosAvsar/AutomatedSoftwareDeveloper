@@ -105,8 +105,9 @@ Useful `run` flags:
 autosd verify-factory
 ```
 
-This runs repository quality gates and the conformance suite, producing
-`conformance/report.json` and failing fast if any generated project gate fails.
+This runs repository quality gates, workflow lint, CI mirror execution, and the
+conformance suite. It produces `conformance/report.json` and
+`verify_factory_report.json`, failing fast if any generator or fixture gate fails.
 
 ### Scrum Backlog & Sprint Automation
 

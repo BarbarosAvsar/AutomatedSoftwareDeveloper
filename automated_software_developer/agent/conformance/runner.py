@@ -12,8 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
-
+from automated_software_developer.agent.ci.workflow_lint import validate_workflow
 from automated_software_developer.agent.conformance.fixtures import (
     ConformanceFixture,
     load_fixtures,
@@ -301,10 +300,24 @@ def _run_security_scan(project_dir: Path, fixture: ConformanceFixture) -> GateRe
         )
     if fixture.security_scan_mode == "off":
         return GateResult(name="security_scan", passed=True, notes=["disabled"])
-    return _run_command(
+    result = _run_command(
         "security_scan",
         "python -m bandit -q -r . -x tests,.venv,venv,.git,.autosd",
         project_dir,
+    )
+    if fixture.security_scan_mode == "required":
+        return result
+    if result.passed:
+        return result
+    return GateResult(
+        name="security_scan",
+        passed=True,
+        command=result.command,
+        exit_code=result.exit_code,
+        duration_seconds=result.duration_seconds,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        notes=["bandit findings (non-blocking)"],
     )
 
 
@@ -385,64 +398,6 @@ def _run_command(name: str, command: str, cwd: Path) -> GateResult:
         stdout=stdout,
         stderr=stderr,
     )
-
-
-def validate_workflow(path: Path) -> list[str]:
-    """Validate workflow YAML and enforce action pinning."""
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        return [f"invalid_yaml:{exc}"]
-    if not isinstance(data, dict):
-        return ["workflow_root_not_mapping"]
-    on_key = "on" if "on" in data else True if True in data else None
-    if on_key is None:
-        return ["missing_on"]
-    if "jobs" not in data or not isinstance(data["jobs"], dict):
-        return ["missing_jobs"]
-    errors: list[str] = []
-    for job_id, job in data["jobs"].items():
-        if not isinstance(job, dict):
-            errors.append(f"job_not_mapping:{job_id}")
-            continue
-        steps = job.get("steps", [])
-        if steps and not isinstance(steps, list):
-            errors.append(f"steps_not_list:{job_id}")
-            continue
-        for step in steps or []:
-            if not isinstance(step, dict):
-                errors.append(f"step_not_mapping:{job_id}")
-                continue
-            uses = step.get("uses")
-            if isinstance(uses, str) and not _is_pinned_action(uses):
-                errors.append(f"unpin_action:{uses}")
-            for value in step.values():
-                if isinstance(value, str) and not _expressions_balanced(value):
-                    errors.append("invalid_expression_syntax")
-                    break
-    return errors
-
-
-def _is_pinned_action(uses: str) -> bool:
-    """Return True if action reference is pinned to a SHA or local action."""
-    if uses.startswith("./") or uses.startswith("docker://"):
-        return True
-    if "@" not in uses:
-        return False
-    _, ref = uses.rsplit("@", 1)
-    return bool(_is_sha(ref))
-
-
-def _is_sha(ref: str) -> bool:
-    """Check if the reference looks like a 40-char SHA."""
-    if len(ref) != 40:
-        return False
-    return all(char in "0123456789abcdef" for char in ref.lower())
-
-
-def _expressions_balanced(text: str) -> bool:
-    """Ensure GitHub expression delimiters are balanced."""
-    return text.count("${{") == text.count("}}")
 
 
 def _trim_output(text: str, limit: int = 4000) -> str:

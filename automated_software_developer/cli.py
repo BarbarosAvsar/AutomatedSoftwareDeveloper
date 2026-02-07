@@ -8,7 +8,7 @@ import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -38,6 +38,8 @@ from automated_software_developer.agent.agile.sprint_engine import (
     freeze_sprint,
 )
 from automated_software_developer.agent.audit import AuditLogger
+from automated_software_developer.agent.ci.mirror import run_ci_mirror
+from automated_software_developer.agent.ci.workflow_lint import lint_workflows
 from automated_software_developer.agent.conformance.runner import (
     ConformanceConfig,
     run_conformance_suite,
@@ -92,6 +94,7 @@ preauth_app = typer.Typer(no_args_is_help=True)
 backlog_app = typer.Typer(no_args_is_help=True)
 sprint_app = typer.Typer(no_args_is_help=True)
 plugins_app = typer.Typer(no_args_is_help=True)
+ci_app = typer.Typer(no_args_is_help=True)
 console = Console()
 
 app.add_typer(projects_app, name="projects")
@@ -102,6 +105,7 @@ app.add_typer(preauth_app, name="preauth")
 app.add_typer(backlog_app, name="backlog")
 app.add_typer(sprint_app, name="sprint")
 app.add_typer(plugins_app, name="plugins")
+app.add_typer(ci_app, name="ci")
 
 
 def _version_callback(value: bool) -> None:
@@ -190,6 +194,11 @@ def _run_gate_command(command: str) -> tuple[bool, float]:
     result = subprocess.run(shlex.split(command), check=False)
     duration = time.monotonic() - start
     return result.returncode == 0, duration
+
+
+def _write_verify_report(path: Path, payload: dict[str, Any]) -> None:
+    """Write verify-factory report payload to disk."""
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def _create_registry(registry_path: Path | None) -> PortfolioRegistry:
@@ -611,10 +620,24 @@ def verify_factory(
         int,
         typer.Option(help="Parallel worker count for conformance fixtures."),
     ] = 3,
+    verify_report_path: Annotated[
+        Path,
+        typer.Option(
+            "--verify-report-path",
+            help="Path to write the verify-factory report JSON.",
+        ),
+    ] = Path("verify_factory_report.json"),
 ) -> None:
     """Run generator and generated-project quality gates for release readiness."""
     conformance_seed = _ensure_positive(conformance_seed, "conformance-seed")
     max_workers = _ensure_positive(max_workers, "max-workers")
+    verify_report: dict[str, Any] = {
+        "timestamp": datetime.now(tz=UTC).isoformat(),
+        "generator_gates": [],
+        "workflow_lint": {},
+        "ci_mirror": {},
+        "conformance": {},
+    }
     if not skip_generator_gates:
         gates = [
             "python -m ruff check .",
@@ -625,8 +648,40 @@ def verify_factory(
             passed, duration = _run_gate_command(command)
             status = "PASS" if passed else "FAIL"
             console.print(f"[{status}] {command} ({duration:.2f}s)")
+            verify_report["generator_gates"].append(
+                {"command": command, "passed": passed, "duration_seconds": duration}
+            )
             if not passed:
+                _write_verify_report(verify_report_path, verify_report)
                 raise typer.Exit(code=1)
+
+    workflow_results = lint_workflows(Path("."))
+    workflow_errors = [
+        {"path": str(result.path), "errors": list(result.errors)}
+        for result in workflow_results
+        if not result.passed
+    ]
+    verify_report["workflow_lint"] = {
+        "passed": not workflow_errors,
+        "errors": workflow_errors,
+    }
+    if workflow_errors:
+        console.print("[FAIL] Workflow lint failed.")
+        _write_verify_report(verify_report_path, verify_report)
+        raise typer.Exit(code=1)
+    console.print("[PASS] Workflow lint passed.")
+
+    mirror_result = run_ci_mirror(Path("."))
+    verify_report["ci_mirror"] = {
+        "passed": mirror_result.passed,
+        "exit_code": mirror_result.exit_code,
+        "duration_seconds": mirror_result.duration_seconds,
+    }
+    if not mirror_result.passed:
+        console.print("[FAIL] CI mirror failed.")
+        _write_verify_report(verify_report_path, verify_report)
+        raise typer.Exit(code=1)
+    console.print("[PASS] CI mirror passed.")
 
     report = run_conformance_suite(
         config=ConformanceConfig(
@@ -639,8 +694,46 @@ def verify_factory(
     )
     status = "PASS" if report.passed else "FAIL"
     console.print(f"[{status}] Conformance suite complete. Report: {report_path}")
+    verify_report["conformance"] = {
+        "passed": report.passed,
+        "report_path": str(report_path),
+        "output_dir": str(output_dir),
+    }
+    _write_verify_report(verify_report_path, verify_report)
     if not report.passed:
         raise typer.Exit(code=1)
+
+
+@ci_app.command("mirror")
+def ci_mirror(
+    path: Annotated[
+        Path,
+        typer.Option("--path", help="Repository path to run the CI mirror against."),
+    ] = Path("."),
+) -> None:
+    """Run the standardized CI entrypoint for a repository."""
+    result = run_ci_mirror(path)
+    status = "PASS" if result.passed else "FAIL"
+    console.print(f"[{status}] {result.command} ({result.duration_seconds:.2f}s)")
+    if not result.passed:
+        raise typer.Exit(code=1)
+
+
+@ci_app.command("lint-workflows")
+def ci_lint_workflows(
+    path: Annotated[
+        Path,
+        typer.Option("--path", help="Repository path containing workflows."),
+    ] = Path("."),
+) -> None:
+    """Lint GitHub Actions workflows for safety and correctness."""
+    results = lint_workflows(path)
+    failed = [result for result in results if not result.passed]
+    if failed:
+        for result in failed:
+            console.print(f"[FAIL] {result.path}: {', '.join(result.errors)}")
+        raise typer.Exit(code=1)
+    console.print("[PASS] All workflows linted successfully.")
 
 
 @app.command()

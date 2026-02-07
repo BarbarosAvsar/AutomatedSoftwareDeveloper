@@ -127,7 +127,7 @@ def _collect_missing_docstrings(path: Path, tree: ast.AST) -> list[str]:
     violations: list[str] = []
     module = tree if isinstance(tree, ast.Module) else ast.Module(body=[], type_ignores=[])
     for node in module.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             if node.name.startswith("_"):
                 continue
             if ast.get_docstring(node) is None:
@@ -136,7 +136,7 @@ def _collect_missing_docstrings(path: Path, tree: ast.AST) -> list[str]:
             if ast.get_docstring(node) is None:
                 violations.append(f"{path}:{node.lineno}:{node.name}")
             for child in node.body:
-                if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if not isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
                     continue
                 if child.name.startswith("_"):
                     continue

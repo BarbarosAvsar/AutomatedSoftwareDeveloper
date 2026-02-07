@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+from automated_software_developer.agent.ci.workflow_lint import validate_workflow
 from automated_software_developer.agent.conformance.fixtures import load_fixtures
 from automated_software_developer.agent.conformance.reporting import (
     ConformanceReport,
@@ -16,7 +17,6 @@ from automated_software_developer.agent.conformance.reporting import (
 from automated_software_developer.agent.conformance.runner import (
     ConformanceConfig,
     run_conformance_suite,
-    validate_workflow,
 )
 
 

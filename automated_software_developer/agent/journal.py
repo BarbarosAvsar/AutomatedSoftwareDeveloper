@@ -78,6 +78,6 @@ class PromptJournal:
             if len(cleaned) > MAX_STRING_LENGTH:
                 cleaned = cleaned[:MAX_STRING_LENGTH] + "...<truncated>..."
             return cleaned
-        if isinstance(value, (int, float, bool)) or value is None:
+        if isinstance(value, int | float | bool) or value is None:
             return value
         return redact_sensitive_text(str(value))

@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from automated_software_developer.agent.pipeline.schema import generator_progress_definition
+
 
 @dataclass(frozen=True)
 class PhaseStep:
@@ -75,60 +77,13 @@ class ProgressSnapshot:
 
 def default_phases() -> tuple[PhaseDefinition, ...]:
     """Return canonical phases and steps."""
-    return (
+    return tuple(
         PhaseDefinition(
-            name="Requirements",
-            steps=(
-                PhaseStep("draft"),
-                PhaseStep("refine"),
-                PhaseStep("validate"),
-                PhaseStep("lock"),
-            ),
-        ),
-        PhaseDefinition(
-            name="Planning",
-            steps=(
-                PhaseStep("architecture"),
-                PhaseStep("backlog"),
-                PhaseStep("sprint_planning"),
-            ),
-        ),
-        PhaseDefinition(
-            name="Implementation",
-            steps=(PhaseStep("stories_in_progress"), PhaseStep("stories_completed")),
-            weight=2.0,
-        ),
-        PhaseDefinition(
-            name="Verification",
-            steps=(
-                PhaseStep("tests"),
-                PhaseStep("quality_gates"),
-                PhaseStep("security_scans"),
-            ),
-        ),
-        PhaseDefinition(
-            name="Release",
-            steps=(
-                PhaseStep("version_tag"),
-                PhaseStep("artifacts"),
-            ),
-        ),
-        PhaseDefinition(
-            name="Deployment",
-            steps=(
-                PhaseStep("dev"),
-                PhaseStep("staging"),
-                PhaseStep("production"),
-            ),
-        ),
-        PhaseDefinition(
-            name="Monitoring",
-            steps=(PhaseStep("health_checks"),),
-        ),
-        PhaseDefinition(
-            name="Learning",
-            steps=(PhaseStep("retrospective"), PhaseStep("template_proposals")),
-        ),
+            name=definition["name"],
+            steps=tuple(PhaseStep(step) for step in definition["steps"]),
+            weight=float(definition["weight"]),
+        )
+        for definition in generator_progress_definition()
     )
 
 

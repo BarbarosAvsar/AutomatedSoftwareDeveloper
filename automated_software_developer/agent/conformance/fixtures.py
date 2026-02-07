@@ -75,6 +75,42 @@ def load_fixtures() -> list[ConformanceFixture]:
             requires_strict_typing=True,
             security_scan_mode="required",
         ),
+        ConformanceFixture(
+            fixture_id="strict_typing",
+            requirements_path=requirements_dir / "strict_typing.md",
+            mock_responses_path=requirements_dir / "strict_typing.mock.json",
+            expected_adapter_id="cli_tool",
+            required_paths=[
+                "README.md",
+                "ci/run_ci.sh",
+                ".github/workflows/ci.yml",
+                "mypy.ini",
+            ],
+            requires_strict_typing=True,
+        ),
+        ConformanceFixture(
+            fixture_id="strict_security",
+            requirements_path=requirements_dir / "strict_security.md",
+            mock_responses_path=requirements_dir / "strict_security.mock.json",
+            expected_adapter_id="cli_tool",
+            required_paths=[
+                "README.md",
+                "ci/run_ci.sh",
+                ".github/workflows/ci.yml",
+            ],
+            security_scan_mode="required",
+        ),
+        ConformanceFixture(
+            fixture_id="no_telemetry",
+            requirements_path=requirements_dir / "no_telemetry.md",
+            mock_responses_path=requirements_dir / "no_telemetry.mock.json",
+            expected_adapter_id="cli_tool",
+            required_paths=[
+                "README.md",
+                "ci/run_ci.sh",
+                ".github/workflows/ci.yml",
+            ],
+        ),
     ]
 
 

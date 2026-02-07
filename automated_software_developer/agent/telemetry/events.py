@@ -69,7 +69,7 @@ class TelemetryEvent:
         timestamp = _require_string(payload.get("timestamp"), "timestamp")
         metric_name = _require_string(payload.get("metric_name"), "metric_name")
         value_raw = payload.get("value")
-        if not isinstance(value_raw, (int, float)):
+        if not isinstance(value_raw, int | float):
             raise ValueError("Expected 'value' to be numeric.")
         project_id = _require_string(payload.get("project_id"), "project_id")
 
