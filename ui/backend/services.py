@@ -9,9 +9,12 @@ from typing import Any
 from uuid import uuid4
 
 from automated_software_developer.agent.policy.engine import resolve_effective_policy
+from automated_software_developer.agent.progress import ProgressTracker
 from automated_software_developer.agent.ui.requirements_assistant import (
     RequirementsAssistant,
     RequirementsDraft,
+    RequirementsRefinement,
+    RequirementsValidation,
 )
 from automated_software_developer.agent.ui.requirements_assistant import (
     RequirementsResponse as AssistantResponse,
@@ -47,6 +50,13 @@ class RequirementsService:
 
     def finalize(self, session_id: str) -> RequirementsDraft:
         return self._assistant.finalize(session_id)
+
+    def refine(self, markdown: str) -> RequirementsRefinement:
+        draft = self._assistant.start_session(markdown).draft
+        return self._assistant.refine_markdown(draft)
+
+    def validate(self, markdown: str) -> RequirementsValidation:
+        return self._assistant.validate_markdown(markdown)
 
     def _to_service_response(self, response: AssistantResponse) -> RequirementsServiceResponse:
         return RequirementsServiceResponse(
@@ -118,6 +128,7 @@ class LaunchCoordinator:
         if not project.requirements:
             raise ValueError("Project requirements must be set before launch.")
         policy = resolve_effective_policy(project_policy=None, grant=None)
+        self._persist_requirements(project_id, project.requirements, policy.payload)
         self._broker.publish(
             Event.create(
                 project_id=project_id,
@@ -128,6 +139,24 @@ class LaunchCoordinator:
         )
         launch_id = uuid4().hex
         _ = self._store.update_status(project_id, ProjectStatus.running)
+        self._store.add_run(
+            project_id,
+            {
+                "run_id": launch_id,
+                "status": ProjectStatus.running,
+                "started_at": datetime.now(UTC),
+            },
+        )
+        self._store.add_artifact(
+            project_id,
+            {"name": "Requirements Snapshot", "path": ".autosd/refined_requirements.md"},
+        )
+        tracker = ProgressTracker(project_id=project_id, base_dir=Path.cwd())
+        tracker.start_phase("Requirements")
+        tracker.complete_step("Requirements", "lock")
+        tracker.record_story_points(completed=0, total=20)
+        snapshot = tracker.save()
+        self._store.update_progress(project_id, snapshot.to_dict())
         self._broker.publish(
             Event.create(
                 project_id=project_id,
@@ -140,12 +169,75 @@ class LaunchCoordinator:
         self._broker.publish(
             Event.create(
                 project_id=project_id,
+                event_type="progress.updated",
+                message="Progress snapshot updated.",
+                reason=f"percent={snapshot.percent_complete}",
+            )
+        )
+        self._broker.publish(
+            Event.create(
+                project_id=project_id,
                 event_type="agent_activity",
                 message="ENG implementing sprint backlog.",
                 reason="autonomous_execution",
             )
         )
         return launch_id, ProjectStatus.running
+
+    def pause(self, project_id: str) -> ProjectStatus:
+        """Pause an autonomous build."""
+        status = self._store.update_status(project_id, ProjectStatus.paused)
+        self._broker.publish(
+            Event.create(
+                project_id=project_id,
+                event_type="autonomy_pause",
+                message="Autonomous build paused.",
+                reason="manual_pause",
+            )
+        )
+        return status
+
+    def resume(self, project_id: str) -> ProjectStatus:
+        """Resume a paused autonomous build."""
+        status = self._store.update_status(project_id, ProjectStatus.running)
+        self._broker.publish(
+            Event.create(
+                project_id=project_id,
+                event_type="autonomy_resume",
+                message="Autonomous build resumed.",
+                reason="manual_resume",
+            )
+        )
+        return status
+
+    def cancel(self, project_id: str) -> ProjectStatus:
+        """Cancel an autonomous build."""
+        status = self._store.update_status(project_id, ProjectStatus.failed)
+        self._broker.publish(
+            Event.create(
+                project_id=project_id,
+                event_type="autonomy_cancel",
+                message="Autonomous build cancelled.",
+                reason="manual_cancel",
+            )
+        )
+        return status
+
+    def _persist_requirements(
+        self, project_id: str, requirements: str, policy_payload: dict[str, Any]
+    ) -> None:
+        autosd_dir = Path.cwd() / ".autosd"
+        autosd_dir.mkdir(parents=True, exist_ok=True)
+        (autosd_dir / "refined_requirements.md").write_text(
+            requirements, encoding="utf-8"
+        )
+        (autosd_dir / "requirements_snapshot.json").write_text(
+            _to_json({"project_id": project_id, "requirements": requirements}),
+            encoding="utf-8",
+        )
+        (autosd_dir / "policy_resolved.json").write_text(
+            _to_json(policy_payload), encoding="utf-8"
+        )
 
 
 def create_default_paths(base_dir: Path) -> dict[str, Path]:
@@ -157,3 +249,9 @@ def create_default_paths(base_dir: Path) -> dict[str, Path]:
         "registry_path": base_dir / f"registry_{timestamp}.json",
         "incidents_path": base_dir / "incidents.json",
     }
+
+
+def _to_json(payload: dict[str, Any]) -> str:
+    import json
+
+    return json.dumps(payload, sort_keys=True)

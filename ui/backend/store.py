@@ -27,6 +27,9 @@ class ProjectRecord:
     sprint_progress: float
     requirements: str | None
     plan: dict[str, Any] | None
+    progress: dict[str, Any] | None
+    artifacts: list[dict[str, Any]]
+    runs: list[dict[str, Any]]
 
 
 class ProjectStore:
@@ -57,6 +60,9 @@ class ProjectStore:
             sprint_progress=0.0,
             requirements=None,
             plan=None,
+            progress=None,
+            artifacts=[],
+            runs=[],
         )
         self._projects[project_id] = record
         return self._to_response(record)
@@ -85,6 +91,33 @@ class ProjectStore:
         record.updated_at = datetime.now(UTC)
         return self._to_response(record)
 
+    def update_progress(self, project_id: str, progress: dict[str, Any]) -> None:
+        record = self._get_record(project_id)
+        record.progress = progress
+        record.updated_at = datetime.now(UTC)
+
+    def get_progress(self, project_id: str) -> dict[str, Any] | None:
+        record = self._get_record(project_id)
+        return record.progress
+
+    def add_artifact(self, project_id: str, artifact: dict[str, Any]) -> None:
+        record = self._get_record(project_id)
+        record.artifacts.append(artifact)
+        record.updated_at = datetime.now(UTC)
+
+    def list_artifacts(self, project_id: str) -> list[dict[str, Any]]:
+        record = self._get_record(project_id)
+        return list(record.artifacts)
+
+    def add_run(self, project_id: str, run: dict[str, Any]) -> None:
+        record = self._get_record(project_id)
+        record.runs.append(run)
+        record.updated_at = datetime.now(UTC)
+
+    def list_runs(self, project_id: str) -> list[dict[str, Any]]:
+        record = self._get_record(project_id)
+        return list(record.runs)
+
     def _get_record(self, project_id: str) -> ProjectRecord:
         if project_id not in self._projects:
             raise KeyError("project not found")
@@ -105,4 +138,5 @@ class ProjectStore:
             sprint_progress=record.sprint_progress,
             requirements=record.requirements,
             plan=record.plan,
+            progress=record.progress,
         )
