@@ -28,9 +28,9 @@ def run_ci_mirror(repo_path: Path) -> MirrorResult:
     if not resolved.exists() or not resolved.is_dir():
         raise ValueError("repo_path must be an existing directory.")
     entrypoint = resolved / "ci" / "run_ci.sh"
-    if not entrypoint.exists():
+    if not entrypoint.is_file():
         raise ValueError("ci/run_ci.sh missing for CI mirror run.")
-    command = "./ci/run_ci.sh"
+    command = "bash ./ci/run_ci.sh"
     start = time.monotonic()
     result = subprocess.run(
         shlex.split(command),
