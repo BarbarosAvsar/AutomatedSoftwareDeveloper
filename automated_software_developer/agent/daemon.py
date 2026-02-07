@@ -20,6 +20,7 @@ from automated_software_developer.agent.deploy import (
     default_deployment_targets,
 )
 from automated_software_developer.agent.incidents.engine import IncidentEngine
+from automated_software_developer.agent.orchestrator import SoftwareDevelopmentAgent
 from automated_software_developer.agent.patching import PatchEngine
 from automated_software_developer.agent.policy.engine import (
     EffectivePolicy,
@@ -27,6 +28,7 @@ from automated_software_developer.agent.policy.engine import (
 )
 from automated_software_developer.agent.portfolio.registry import PortfolioRegistry
 from automated_software_developer.agent.providers.base import LLMProvider
+from automated_software_developer.agent.providers.mock_provider import MockProvider
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,8 @@ class CompanyDaemon:
             requirements = requirements_file.read_text(encoding="utf-8")
             project_dir = self.config.projects_dir / project_id
             policy = resolve_effective_policy(project_policy=None, grant=None)
+            scrum_agent = SoftwareDevelopmentAgent(provider=_clone_provider(self.provider))
+            _ = scrum_agent.run_scrum_cycle(requirements=requirements, output_dir=project_dir)
             engineering = EngineeringAgent(provider=self.provider)
             _ = engineering.handle(
                 context=_build_agent_context(
@@ -196,3 +200,10 @@ def _build_agent_context(
 
 def _build_work_order(department: str, action: str, payload: dict[str, Any]) -> WorkOrder:
     return WorkOrder(department=department, action=action, payload=payload)
+
+
+def _clone_provider(provider: LLMProvider) -> LLMProvider:
+    """Clone providers that should not share state across workflows."""
+    if isinstance(provider, MockProvider):
+        return MockProvider(provider._responses)
+    return provider
