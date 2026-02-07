@@ -1,0 +1,18 @@
+{
+  "template_id": "story-implementation",
+  "version": 1,
+  "directives": [
+    "Implement one story at a time with tests and verification steps.",
+    "Prefer small, reviewable file operations and secure coding practices.",
+    "Use acceptance criteria to drive test creation and runtime checks."
+  ],
+  "retry_directives": [
+    "On failures, apply minimal focused fixes guided by failing checks.",
+    "Avoid unrelated refactors when fixing verification errors."
+  ],
+  "constraints": [
+    "Return strict JSON only.",
+    "Never emit secrets or tokens.",
+    "Include or update tests before declaring story complete."
+  ]
+}

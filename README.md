@@ -1,1 +1,174 @@
-# AutomatedSoftwareDeveloper
+﻿# Automated Software Developer
+
+Autonomous software-factory agent for requirements refinement, story-based implementation, quality/security validation, deployment scaffolding, telemetry analytics, incident healing, and policy-gated operations.
+
+## Security Posture
+
+This system is **risk-reduced and hardened** (not guaranteed secure). It enforces:
+
+- path traversal protection and command safety filtering
+- secret redaction/scanning for journals/logs/artifacts
+- privacy-safe telemetry (off by default)
+- policy + preauthorization gating for high-risk actions
+
+Residual risk still exists and requires human governance.
+
+## Pipeline
+
+`autosd run` remains backward-compatible and now includes additional artifacts/capabilities:
+
+1. Requirements refinement (`.autosd/refined_requirements.md`)
+2. Story backlog planning (`.autosd/backlog.json`)
+3. Story-by-story sprint execution (`.autosd/sprint_log.jsonl`)
+4. Prompt journaling (`.autosd/prompt_journal.jsonl`)
+5. Quality/security gates (ruff/mypy/pytest + optional bandit)
+6. Platform capability planning (`.autosd/platform_plan.json`, `.autosd/capability_graph.json`)
+7. Packaging/build planning (optional execution)
+8. Provenance output (`.autosd/provenance/build_manifest.json`, optional `sbom.json`)
+9. Progress/design docs (`.autosd/progress.json`, `.autosd/design_doc.md`)
+
+## Installation
+
+```bash
+python -m pip install -e .[dev]
+```
+
+Optional security extras:
+
+```bash
+python -m pip install -e .[security]
+```
+
+## Core Commands
+
+### Run / Refine / Learn
+
+```bash
+autosd run --requirements-file requirements.md --output-dir output/project
+autosd refine --requirements-file requirements.md --output-dir output/refined-only
+autosd learn --journals output/project/.autosd/prompt_journal.jsonl --update-templates
+```
+
+Useful `run` flags:
+
+- `--preferred-platform web_app|api_service|cli_tool|desktop_app|mobile_app`
+- `--execute-packaging/--plan-packaging`
+- `--reproducible/--non-reproducible`
+- `--sbom-mode off|if-available|required`
+- `--security-scan --security-scan-mode off|if-available|required`
+- `--gitops-enable --gitops-auto-push --gitops-tag-release`
+
+### Portfolio / Dashboard
+
+```bash
+autosd projects list
+autosd projects show <project_id>
+autosd projects status --all
+autosd projects retire <project_id>
+autosd dashboard serve --host 127.0.0.1 --port 8765
+```
+
+### Patch Engine (single/all)
+
+```bash
+autosd patch --project <id> --reason "security fix"
+autosd patch-all --domain commerce --needs-upgrade --reason "dependency refresh"
+```
+
+### Deployment
+
+```bash
+autosd deploy --project <id> --env staging --target generic_container
+autosd rollback --project <id> --env staging --target generic_container
+autosd promote --project <id> --from staging --to prod --target generic_container
+```
+
+Implemented targets:
+
+- `docker`
+- `github_pages`
+- `generic_container`
+
+### Telemetry (privacy-safe)
+
+Telemetry is OFF by default.
+
+```bash
+autosd telemetry enable --project <id> --mode anonymous --retention-days 30
+autosd telemetry report --project <id>
+autosd telemetry report-all --domain commerce
+```
+
+Project-side event file (schema-validated):
+
+- `.autosd/telemetry/events.jsonl`
+
+Local warehouse:
+
+- `~/.autosd/telemetry.db`
+
+### Incidents / Self-Healing
+
+```bash
+autosd incidents list
+autosd incidents show <incident_id>
+autosd heal --project <id> --target generic_container --env staging
+```
+
+Postmortems:
+
+- `.autosd/postmortems/<incident_id>.md`
+
+### Kill Switch
+
+```bash
+autosd halt --project <id>
+autosd resume --project <id>
+```
+
+## Preauthorization (Signed Grants)
+
+High-risk autonomy uses signed local grants.
+
+```bash
+autosd preauth init-keys
+autosd preauth create-grant --project-ids <id> --auto-deploy-prod --expires-in-hours 1
+autosd preauth list
+autosd preauth show <grant_id>
+autosd preauth revoke <grant_id>
+autosd preauth rotate-keys
+```
+
+Operational commands support:
+
+- `--require-preauth`
+- `--preauth-grant <grant_id>`
+
+Default safety rule: production deploy is blocked unless a valid grant explicitly allows it.
+
+## Learning Model
+
+Learning is bounded and reviewable:
+
+- journal-driven proposals are generated first
+- versioned prompt templates are updated only when explicitly requested
+- prior template versions remain available for rollback
+
+Artifacts:
+
+- `PROMPT_PLAYBOOK.md`
+- `PROMPT_TEMPLATE_CHANGES.md`
+- `automated_software_developer/agent/prompt_patterns/*.v*.json`
+
+## CI / Local Verification
+
+```bash
+python -m ruff check .
+python -m mypy automated_software_developer
+python -m pytest
+```
+
+## In-Repo Skills
+
+- `skills/agile-requirements-refiner/SKILL.md`
+- `skills/story-implementer-with-tests/SKILL.md`

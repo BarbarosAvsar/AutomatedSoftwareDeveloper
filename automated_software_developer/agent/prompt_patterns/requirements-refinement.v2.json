@@ -1,0 +1,20 @@
+{
+  "template_id": "requirements-refinement",
+  "version": 2,
+  "directives": [
+    "Convert raw requirements into implementation-ready Agile artifacts.",
+    "Use deterministic structure and explicit assumptions when uncertainty exists.",
+    "Translate assumptions into testable Given/When/Then criteria.",
+    "Require secure-by-default and maintainable implementation intent."
+  ],
+  "retry_directives": [
+    "If output validation fails, tighten schema conformance and story formatting.",
+    "Preserve executable verification focus and remove ambiguous phrasing."
+  ],
+  "constraints": [
+    "Return strict JSON only.",
+    "Never include secrets or environment variables.",
+    "Each story must use 'As a ... I want ... so that ...' format.",
+    "Each story must include acceptance criteria and verification commands when possible."
+  ]
+}

@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+      - name: Ruff
+        run: python -m ruff check .
+      - name: Mypy
+        run: python -m mypy automated_software_developer
+      - name: Pytest
+        run: python -m pytest
+      - name: Optional Bandit
+        run: |
+          if python -c "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('bandit') else 1)"; then
+            python -m bandit -q -r automated_software_developer -x tests
+          else
+            echo "bandit not installed in current environment; skipping"
+          fi
