@@ -1,4 +1,4 @@
-﻿"""Web application platform adapter."""
+"""Web application platform adapter."""
 
 from __future__ import annotations
 

@@ -37,3 +37,41 @@ def test_project_creation_and_plan_flow() -> None:
     assert plan_response.status_code == 200
     plan = plan_response.json()
     assert "architecture" in plan
+
+
+def test_requirements_refine_and_validate() -> None:
+    app = create_app()
+    client = TestClient(app)
+
+    refine_response = client.post(
+        "/api/requirements/refine",
+        json={"markdown": "Build an AEC with chat and progress."},
+    )
+    assert refine_response.status_code == 200
+    assert "Requirements" in refine_response.json()["markdown"]
+
+    validate_response = client.post(
+        "/api/requirements/validate",
+        json={"markdown": "# Requirements\n## Functional requirements\n- Chat\n"},
+    )
+    assert validate_response.status_code == 200
+    assert "Problem / Goals" in validate_response.json()["missing_sections"]
+
+
+def test_launch_progress_endpoint() -> None:
+    app = create_app()
+    client = TestClient(app)
+
+    create_response = client.post("/api/projects", json={"name": "Nova"})
+    project_id = create_response.json()["id"]
+    client.put(
+        f"/api/projects/{project_id}/requirements",
+        json={"requirements": "One-click autonomous build."},
+    )
+    launch_response = client.post(f"/api/projects/{project_id}/launch")
+    assert launch_response.status_code == 200
+
+    progress_response = client.get(f"/api/projects/{project_id}/progress")
+    assert progress_response.status_code == 200
+    payload = progress_response.json()
+    assert payload["project_id"] == project_id

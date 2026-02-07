@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import PageShell from "../components/layout/PageShell";
+import ConsoleLayout from "../components/layout/ConsoleLayout";
 
 const sampleProjects = [
   {
@@ -28,7 +28,7 @@ const sampleProjects = [
 
 export default function DashboardPage() {
   return (
-    <PageShell
+    <ConsoleLayout
       title="Portfolio Dashboard"
       description="All autonomous programs, in one real-time control plane."
       actions={
@@ -90,6 +90,6 @@ export default function DashboardPage() {
           </div>
         ))}
       </section>
-    </PageShell>
+    </ConsoleLayout>
   );
 }

@@ -46,6 +46,7 @@ from automated_software_developer.agent.incidents.engine import IncidentEngine
 from automated_software_developer.agent.learning import PromptPatternStore, learn_from_journals
 from automated_software_developer.agent.orchestrator import AgentConfig, SoftwareDevelopmentAgent
 from automated_software_developer.agent.patching import PatchEngine, PatchFilters
+from automated_software_developer.agent.plugins.registry import PluginRegistry
 from automated_software_developer.agent.policy.engine import (
     evaluate_action,
     resolve_effective_policy,
@@ -83,6 +84,7 @@ incidents_app = typer.Typer(no_args_is_help=True)
 preauth_app = typer.Typer(no_args_is_help=True)
 backlog_app = typer.Typer(no_args_is_help=True)
 sprint_app = typer.Typer(no_args_is_help=True)
+plugins_app = typer.Typer(no_args_is_help=True)
 console = Console()
 
 app.add_typer(projects_app, name="projects")
@@ -92,6 +94,7 @@ app.add_typer(incidents_app, name="incidents")
 app.add_typer(preauth_app, name="preauth")
 app.add_typer(backlog_app, name="backlog")
 app.add_typer(sprint_app, name="sprint")
+app.add_typer(plugins_app, name="plugins")
 
 
 def _version_callback(value: bool) -> None:
@@ -2312,6 +2315,35 @@ def daemon(
             import time
 
             time.sleep(interval_seconds)
+
+
+@plugins_app.command("list")
+def list_plugins() -> None:
+    """List available plugins."""
+    registry = PluginRegistry()
+    table = Table(title="Available Plugins")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name", style="magenta")
+    table.add_column("Enabled", style="green")
+    for plugin in registry.list_plugins():
+        table.add_row(plugin.plugin_id, plugin.name, "yes" if plugin.enabled else "no")
+    console.print(table)
+
+
+@plugins_app.command("enable")
+def enable_plugin(plugin_id: Annotated[str, typer.Argument(..., min=1)]) -> None:
+    """Enable a plugin by id."""
+    registry = PluginRegistry()
+    plugin = registry.enable_plugin(plugin_id)
+    console.print(f"Enabled plugin: {plugin.name}")
+
+
+@plugins_app.command("disable")
+def disable_plugin(plugin_id: Annotated[str, typer.Argument(..., min=1)]) -> None:
+    """Disable a plugin by id."""
+    registry = PluginRegistry()
+    plugin = registry.disable_plugin(plugin_id)
+    console.print(f"Disabled plugin: {plugin.name}")
 
 
 if __name__ == "__main__":

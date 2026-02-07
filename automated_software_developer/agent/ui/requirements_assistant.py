@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from io import BytesIO
+from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
@@ -53,6 +55,22 @@ class RequirementsResponse:
     draft: RequirementsDraft
 
 
+@dataclass(frozen=True)
+class RequirementsValidation:
+    """Validation report for requirements markdown."""
+
+    missing_sections: tuple[str, ...]
+    warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RequirementsRefinement:
+    """Refined requirements output."""
+
+    markdown: str
+    summary: str
+
+
 class RequirementsAssistant:
     """Rule-based assistant for clarifying and structuring requirements."""
 
@@ -90,6 +108,32 @@ class RequirementsAssistant:
         if session.draft is None:
             raise ValueError("No draft exists for session.")
         return session.draft
+
+    def refine_markdown(self, draft: RequirementsDraft) -> RequirementsRefinement:
+        """Return a structured markdown requirements document."""
+        markdown = _build_markdown_from_draft(draft)
+        summary = "Structured requirements ready for review."
+        return RequirementsRefinement(markdown=markdown, summary=summary)
+
+    def validate_markdown(self, markdown: str) -> RequirementsValidation:
+        """Validate markdown content for required sections."""
+        if not markdown.strip():
+            raise ValueError("markdown must be non-empty.")
+        missing = []
+        required = [
+            "Problem / Goals",
+            "Functional requirements",
+            "Non-functional requirements",
+            "Acceptance criteria",
+        ]
+        lowered = markdown.lower()
+        for section in required:
+            if section.lower() not in lowered:
+                missing.append(section)
+        warnings = []
+        if "analytics" in lowered and "opt-in" not in lowered:
+            warnings.append("Analytics should be explicitly opt-in.")
+        return RequirementsValidation(missing_sections=tuple(missing), warnings=tuple(warnings))
 
     def _get_session(self, session_id: str) -> RequirementsSession:
         if session_id not in self._sessions:
@@ -217,3 +261,68 @@ class RequirementsAssistant:
         if "soc2" in context.lower():
             flags.append("SOC2")
         return flags
+
+
+def parse_requirements_upload(filename: str, content: bytes) -> str:
+    """Parse requirements upload content from md/txt/pdf."""
+    if not filename.strip():
+        raise ValueError("filename must be non-empty.")
+    if not content:
+        raise ValueError("content must be non-empty.")
+    suffix = Path(filename).suffix.lower()
+    if suffix in {".md", ".txt"}:
+        return content.decode("utf-8", errors="replace").strip()
+    if suffix == ".pdf":
+        try:
+            from pypdf import PdfReader
+        except ImportError as exc:  # pragma: no cover - dependency missing
+            raise ValueError("PDF parsing dependency is unavailable.") from exc
+        reader = PdfReader(BytesIO(content))
+        text_parts = []
+        for page in reader.pages:
+            text_parts.append(page.extract_text() or "")
+        text = "\n".join(text_parts).strip()
+        if not text:
+            raise ValueError("PDF contained no extractable text.")
+        return text
+    raise ValueError("Unsupported file type.")
+
+
+def _build_markdown_from_draft(draft: RequirementsDraft) -> str:
+    lines = [
+        "# Requirements",
+        "",
+        "## Problem / Goals",
+        *(f"- {goal}" for goal in draft.goals),
+        "",
+        "## Users / Personas (optional)",
+        "- TBD",
+        "",
+        "## Functional requirements",
+        *(f"- {req}" for req in draft.functional_requirements),
+        "",
+        "## Non-functional requirements",
+        *(f"- {req}" for req in draft.non_functional_requirements),
+        "",
+        "## Platforms/targets",
+        "- Web",
+        "",
+        "## Deployment targets & environments",
+        "- Dev, Staging, Production",
+        "",
+        "## Analytics requirement (optional)",
+        "- Opt-in only if explicitly requested.",
+        "",
+        "## Legal/licensing/monetization flags (optional)",
+        "- TBD",
+        "",
+        "## Constraints",
+        *(f"- {item}" for item in draft.constraints),
+        "",
+        "## Acceptance criteria / Definition of Done additions",
+        *(f"- {item}" for item in draft.acceptance_criteria),
+        "",
+        "## Risks",
+        *(f"- {item}" for item in draft.risks),
+    ]
+    return "\n".join(lines).strip()
