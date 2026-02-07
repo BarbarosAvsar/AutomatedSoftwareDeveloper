@@ -148,3 +148,50 @@ def test_telemetry_cli_enable_and_report(tmp_path: Path) -> None:
     )
     assert report_result.exit_code == 0
     assert "Telemetry Report" in report_result.stdout
+
+
+def test_telemetry_cli_disable_blocks_reporting(tmp_path: Path) -> None:
+    repo = tmp_path / "project-disabled"
+    _init_repo(repo)
+    registry_path = tmp_path / "registry.jsonl"
+    registry = PortfolioRegistry(write_path=registry_path, read_paths=[registry_path])
+    registry.register_project(
+        project_id="telemetry-off",
+        name="Telemetry Off",
+        domain="web",
+        platforms=["web_app"],
+        metadata={"local_path": str(repo)},
+    )
+
+    runner = CliRunner()
+    env = {"AUTOSD_TELEMETRY_DB": str(tmp_path / "telemetry.db")}
+    enable_result = runner.invoke(
+        app,
+        [
+            "telemetry",
+            "enable",
+            "--project",
+            "telemetry-off",
+            "--mode",
+            "off",
+            "--registry-path",
+            str(registry_path),
+        ],
+        env=env,
+    )
+    assert enable_result.exit_code == 0
+
+    report_result = runner.invoke(
+        app,
+        [
+            "telemetry",
+            "report",
+            "--project",
+            "telemetry-off",
+            "--registry-path",
+            str(registry_path),
+        ],
+        env=env,
+    )
+    assert report_result.exit_code == 0
+    assert "Telemetry is disabled" in report_result.stdout

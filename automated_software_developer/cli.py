@@ -11,6 +11,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from automated_software_developer import __version__
 from automated_software_developer.agent.audit import AuditLogger
 from automated_software_developer.agent.deploy import (
     DeploymentOrchestrator,
@@ -33,6 +34,7 @@ from automated_software_developer.agent.preauth.grants import (
     ensure_project_grant_reference,
     list_grants,
     load_grant,
+    load_revoked_ids,
     revoke_grant,
     save_grant,
 )
@@ -47,6 +49,7 @@ from automated_software_developer.agent.providers.mock_provider import MockProvi
 from automated_software_developer.agent.providers.openai_provider import OpenAIProvider
 from automated_software_developer.agent.telemetry.policy import TelemetryPolicy
 from automated_software_developer.agent.telemetry.store import TelemetryStore
+from automated_software_developer.logging_utils import configure_logging
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 projects_app = typer.Typer(no_args_is_help=True)
@@ -61,6 +64,21 @@ app.add_typer(dashboard_app, name="dashboard")
 app.add_typer(telemetry_app, name="telemetry")
 app.add_typer(incidents_app, name="incidents")
 app.add_typer(preauth_app, name="preauth")
+
+
+def _version_callback(value: bool) -> None:
+    """Print package version and exit when requested."""
+    if value:
+        console.print(__version__)
+        raise typer.Exit()
+
+
+def _confirm_destructive_action(message: str, *, force: bool) -> None:
+    """Confirm destructive actions unless forced."""
+    if force:
+        return
+    if not typer.confirm(message, default=False):
+        raise typer.Exit(code=1)
 
 
 def _load_requirements(requirements_file: Path | None, requirements_text: str | None) -> str:
@@ -233,9 +251,17 @@ def _resolve_verified_grant(
     """Verify optional grant and enforce requirement when requested."""
     if grant_id is None:
         if require_preauth:
-            raise typer.BadParameter(
-                "Preauthorization is required but --preauth-grant was omitted."
+            hint = (
+                "Create a grant with `autosd preauth create-grant` and pass "
+                "--preauth-grant <id>."
             )
+            if required_capability == "auto_deploy_prod":
+                hint = (
+                    "Production deploys require a signed grant. "
+                    "Create one with `autosd preauth create-grant --auto-deploy-prod` "
+                    "and pass --preauth-grant <id>."
+                )
+            raise typer.BadParameter(f"Preauthorization is required. {hint}")
         return None
     verification = verify_grant(
         grant_id=grant_id,
@@ -249,8 +275,27 @@ def _resolve_verified_grant(
 
 
 @app.callback()
-def main() -> None:
-    """Autonomous software-development agent CLI."""
+def main(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            help="Show AutoSD version and exit.",
+            is_eager=True,
+            callback=_version_callback,
+        ),
+    ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", "-v", help="Enable verbose debug logging."),
+    ] = False,
+    log_file: Annotated[
+        Path,
+        typer.Option("--log-file", help="Write logs to autosd.log (default: ./autosd.log)."),
+    ] = Path("autosd.log"),
+) -> None:
+    """Autonomous software-development agent CLI with policy-gated operations."""
+    configure_logging(log_file=log_file, verbose=verbose)
 
 
 @app.command()
@@ -381,7 +426,13 @@ def run(
         ),
     ] = True,
 ) -> None:
-    """Run the full autonomous refine -> implement -> verify workflow."""
+    """Run the full autonomous refine -> implement -> verify workflow.
+
+    Examples:
+        autosd run --requirements-file requirements.md --output-dir output/project
+        autosd run --requirements-text "Build a CLI" --provider mock \\
+          --mock-responses-file mocks.json
+    """
     requirements = _load_requirements(requirements_file, requirements_text)
     resolved_provider = _create_provider(provider, model, mock_responses_file)
     max_task_attempts = _ensure_positive(max_task_attempts, "max-task-attempts")
@@ -480,7 +531,12 @@ def refine(
         typer.Option(help="JSON file of queued responses when provider=mock."),
     ] = None,
 ) -> None:
-    """Run only autonomous requirements refinement."""
+    """Run only autonomous requirements refinement.
+
+    Examples:
+        autosd refine --requirements-file requirements.md --output-dir output/refined
+        autosd refine --requirements-text "API for inventory tracking"
+    """
     requirements = _load_requirements(requirements_file, requirements_text)
     resolved_provider = _create_provider(provider, model, mock_responses_file)
     agent = SoftwareDevelopmentAgent(provider=resolved_provider)
@@ -511,7 +567,12 @@ def learn(
         typer.Option(help="Path for human-readable prompt template change log."),
     ] = Path("PROMPT_TEMPLATE_CHANGES.md"),
 ) -> None:
-    """Summarize journal history and optionally update versioned prompt templates."""
+    """Summarize journal history and optionally update versioned prompt templates.
+
+    Examples:
+        autosd learn --journals output/.autosd/prompt_journal.jsonl
+        autosd learn --journals output/.autosd/prompt_journal.jsonl --update-templates
+    """
     if not journals:
         raise typer.BadParameter("Provide at least one --journals path.")
     store = PromptPatternStore()
@@ -759,7 +820,12 @@ def telemetry_enable(
         typer.Option(help="Optional registry JSONL path override."),
     ] = None,
 ) -> None:
-    """Enable or disable privacy-safe telemetry policy for a project."""
+    """Enable or disable privacy-safe telemetry policy for a project.
+
+    Examples:
+        autosd telemetry enable --project my-app --mode anonymous --retention-days 30
+        autosd telemetry enable --project my-app --mode off
+    """
     policy = TelemetryPolicy.from_mode(mode, retention_days=retention_days)
     registry = _create_registry(registry_path)
     entry = registry.get(project)
@@ -787,7 +853,11 @@ def telemetry_report(
         typer.Option(help="Optional registry JSONL path override."),
     ] = None,
 ) -> None:
-    """Ingest local telemetry events and print aggregate report for one project."""
+    """Ingest local telemetry events and print aggregate report for one project.
+
+    Example:
+        autosd telemetry report --project my-app
+    """
     registry = _create_registry(registry_path)
     entry = registry.get(project)
     if entry is None:
@@ -838,7 +908,11 @@ def telemetry_report_all(
         typer.Option(help="Optional platform filter."),
     ] = None,
 ) -> None:
-    """Ingest and report telemetry for all registered projects with telemetry enabled."""
+    """Ingest and report telemetry for all registered projects with telemetry enabled.
+
+    Example:
+        autosd telemetry report-all --domain commerce
+    """
     registry = _create_registry(registry_path)
     entries = registry.list_entries(include_archived=False)
     store = TelemetryStore()
@@ -901,7 +975,11 @@ def incidents_list(
         typer.Option(help="Optional incidents JSONL path override."),
     ] = None,
 ) -> None:
-    """List incidents from append-only incident ledger."""
+    """List incidents from append-only incident ledger.
+
+    Example:
+        autosd incidents list --project my-app
+    """
     engine = _create_incident_engine(registry_path=registry_path, incidents_path=incidents_path)
     records = engine.list_incidents(project_id=project)
     if not records:
@@ -936,7 +1014,11 @@ def incidents_show(
         typer.Option(help="Optional incidents JSONL path override."),
     ] = None,
 ) -> None:
-    """Show one incident record."""
+    """Show one incident record.
+
+    Example:
+        autosd incidents show <incident_id>
+    """
     engine = _create_incident_engine(registry_path=registry_path, incidents_path=incidents_path)
     incident = engine.get_incident(incident_id)
     if incident is None:
@@ -990,7 +1072,11 @@ def heal_project(
         typer.Option("--preauth-grant", help="Grant ID used for healing authorization."),
     ] = None,
 ) -> None:
-    """Run incident-driven self-healing (patch -> optional deploy -> postmortem)."""
+    """Run incident-driven self-healing (patch -> optional deploy -> postmortem).
+
+    Example:
+        autosd heal --project my-app --target generic_container --env staging
+    """
     registry = _create_registry(registry_path)
     entry = registry.get(project)
     if entry is None:
@@ -1018,14 +1104,17 @@ def heal_project(
         if not deploy_decision.allowed:
             raise typer.BadParameter(f"Policy blocked heal deploy: {deploy_decision.reason}")
     engine = _create_incident_engine(registry_path=registry_path, incidents_path=incidents_path)
-    result = engine.heal_project(
-        project_ref=entry.project_id,
-        incident_id=incident,
-        auto_push=auto_push,
-        deploy_target=target,
-        environment=env,
-        execute_deploy=execute_deploy,
-    )
+    try:
+        result = engine.heal_project(
+            project_ref=entry.project_id,
+            incident_id=incident,
+            auto_push=auto_push,
+            deploy_target=target,
+            environment=env,
+            execute_deploy=execute_deploy,
+        )
+    except (KeyError, ValueError) as exc:
+        raise typer.BadParameter(str(exc.args[0])) from exc
     table = Table(title="Heal Result")
     table.add_column("Incident")
     table.add_column("Project")
@@ -1135,7 +1224,12 @@ def preauth_create_grant(
         typer.Option("--break-glass/--no-break-glass"),
     ] = False,
 ) -> None:
-    """Create and sign a preauthorization grant."""
+    """Create and sign a preauthorization grant.
+
+    Examples:
+        autosd preauth create-grant --project-ids my-app --auto-deploy-prod --expires-in-hours 1
+        autosd preauth create-grant --project-ids my-app --auto-heal --no-auto-deploy-prod
+    """
     init_keys()
     private_key = load_private_key()
     scope = {
@@ -1191,25 +1285,52 @@ def preauth_create_grant(
 
 
 @preauth_app.command("list")
-def preauth_list() -> None:
-    """List available signed grants."""
+def preauth_list(
+    active_only: Annotated[
+        bool,
+        typer.Option(
+            "--active-only/--include-expired",
+            help="Only show active (non-expired, non-revoked) grants.",
+        ),
+    ] = False,
+) -> None:
+    """List available signed grants.
+
+    Example:
+        autosd preauth list --active-only
+    """
     grants = list_grants()
     if not grants:
         console.print("No grants found.")
         return
+    revoked_ids = load_revoked_ids()
     table = Table(title="Preauth Grants")
     table.add_column("Grant ID")
     table.add_column("Issuer")
     table.add_column("Expires")
     table.add_column("Break Glass")
+    table.add_column("Status")
+    rows_added = 0
     for grant in grants:
+        if active_only and (grant.grant_id in revoked_ids or grant.is_expired()):
+            continue
         payload = grant.to_dict()
+        status = "active"
+        if grant.grant_id in revoked_ids:
+            status = "revoked"
+        elif grant.is_expired():
+            status = "expired"
         table.add_row(
             grant.grant_id,
             str(payload.get("issuer", "")),
             str(payload.get("expires_at", "")),
             "yes" if bool(payload.get("break_glass", False)) else "no",
+            status,
         )
+        rows_added += 1
+    if rows_added == 0:
+        console.print("No grants matched the selected filters.")
+        return
     console.print(table)
 
 
@@ -1217,7 +1338,11 @@ def preauth_list() -> None:
 def preauth_show(
     grant_id: Annotated[str, typer.Argument(help="Grant identifier.")],
 ) -> None:
-    """Show one grant payload."""
+    """Show one grant payload.
+
+    Example:
+        autosd preauth show <grant_id>
+    """
     grant = load_grant(grant_id)
     if grant is None:
         raise typer.BadParameter(f"Grant '{grant_id}' not found.")
@@ -1229,7 +1354,11 @@ def preauth_revoke(
     grant_id: Annotated[str, typer.Argument(help="Grant identifier.")],
     reason: Annotated[str, typer.Option(help="Revocation reason.")] = "revoked",
 ) -> None:
-    """Revoke a grant immediately."""
+    """Revoke a grant immediately.
+
+    Example:
+        autosd preauth revoke <grant_id> --reason "incident response"
+    """
     revoke_grant(grant_id, reason=reason)
     console.print(f"Grant revoked: {grant_id}")
 
@@ -1259,7 +1388,12 @@ def patch_project(
         typer.Option("--preauth-grant", help="Grant ID used for privileged patch actions."),
     ] = None,
 ) -> None:
-    """Run patch workflow for a single project."""
+    """Run patch workflow for a single project.
+
+    Examples:
+        autosd patch --project my-app --reason "security fix"
+        autosd patch --project my-app --auto-push --preauth-grant <grant_id>
+    """
     if not project.strip():
         raise typer.BadParameter("project must be non-empty.")
     registry = _create_registry(registry_path)
@@ -1372,7 +1506,11 @@ def patch_all_projects(
         typer.Option("--preauth-grant", help="Grant ID used for privileged patch actions."),
     ] = None,
 ) -> None:
-    """Run patch workflow for all projects matching filters."""
+    """Run patch workflow for all projects matching filters.
+
+    Example:
+        autosd patch-all --domain commerce --needs-upgrade --reason "dependency refresh"
+    """
     registry = _create_registry(registry_path)
     required_capability = "auto_push" if auto_push else None
     grant = _resolve_verified_grant(
@@ -1477,8 +1615,17 @@ def deploy_project(
         str | None,
         typer.Option("--preauth-grant", help="Grant ID used for privileged deploy actions."),
     ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Skip confirmation prompt for destructive actions."),
+    ] = False,
 ) -> None:
-    """Deploy one project to selected target/environment."""
+    """Deploy one project to selected target/environment.
+
+    Examples:
+        autosd deploy --project my-app --env staging --target generic_container
+        autosd deploy --project my-app --env prod --target docker --preauth-grant <grant_id>
+    """
     registry = _create_registry(registry_path)
     entry = registry.get(project)
     if entry is None:
@@ -1508,14 +1655,22 @@ def deploy_project(
     decision = evaluate_action(policy=policy, action="deploy", environment=env_normalized)
     if not decision.allowed:
         raise typer.BadParameter(f"Policy blocked deploy action: {decision.reason}")
+    if env_normalized == "prod":
+        _confirm_destructive_action(
+            f"Confirm production deploy for '{entry.project_id}' to {target}? ",
+            force=force,
+        )
     orchestrator = _create_deployment_orchestrator(registry_path)
-    result = orchestrator.deploy(
-        project_ref=entry.project_id,
-        environment=env_normalized,
-        target=target,
-        strategy=strategy,
-        execute=execute,
-    )
+    try:
+        result = orchestrator.deploy(
+            project_ref=entry.project_id,
+            environment=env_normalized,
+            target=target,
+            strategy=strategy,
+            execute=execute,
+        )
+    except KeyError as exc:
+        raise typer.BadParameter(str(exc.args[0])) from exc
     table = Table(title="Deploy Result")
     table.add_column("Project")
     table.add_column("Target")
@@ -1527,7 +1682,7 @@ def deploy_project(
         result.target,
         result.environment,
         result.version,
-        "ok" if result.success else "failed",
+        "[green]ok[/green]" if result.success else "[red]failed[/red]",
     )
     console.print(table)
     console.print(result.message)
@@ -1581,8 +1736,16 @@ def rollback_project(
         str | None,
         typer.Option("--preauth-grant", help="Grant ID used for rollback authorization."),
     ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Skip confirmation prompt for destructive actions."),
+    ] = False,
 ) -> None:
-    """Rollback one project deployment."""
+    """Rollback one project deployment.
+
+    Example:
+        autosd rollback --project my-app --env staging --target generic_container
+    """
     registry = _create_registry(registry_path)
     entry = registry.get(project)
     if entry is None:
@@ -1597,15 +1760,24 @@ def rollback_project(
     project_dir = _resolve_project_path(entry.metadata)
     if grant is not None and project_dir is not None:
         ensure_project_grant_reference(project_dir, grant.grant_id)
-    orchestrator = _create_deployment_orchestrator(registry_path)
-    result = orchestrator.rollback(
-        project_ref=entry.project_id,
-        environment=env,
-        target=target,
-        execute=execute,
+    _confirm_destructive_action(
+        f"Confirm rollback for '{entry.project_id}' in {env} on {target}? ",
+        force=force,
     )
+    orchestrator = _create_deployment_orchestrator(registry_path)
+    try:
+        result = orchestrator.rollback(
+            project_ref=entry.project_id,
+            environment=env,
+            target=target,
+            execute=execute,
+        )
+    except KeyError as exc:
+        raise typer.BadParameter(str(exc.args[0])) from exc
     console.print(
-        f"Rollback {result.target}/{result.environment}: {'ok' if result.success else 'failed'}"
+        "Rollback "
+        f"{result.target}/{result.environment}: "
+        f"{'[green]ok[/green]' if result.success else '[red]failed[/red]'}"
     )
     console.print(result.message)
     AuditLogger().log(
@@ -1660,8 +1832,16 @@ def promote_project(
         str | None,
         typer.Option("--preauth-grant", help="Grant ID used for promotion authorization."),
     ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Skip confirmation prompt for destructive actions."),
+    ] = False,
 ) -> None:
-    """Promote one project from staging to production-like environment."""
+    """Promote one project from staging to production-like environment.
+
+    Example:
+        autosd promote --project my-app --from staging --to prod --target generic_container
+    """
     registry = _create_registry(registry_path)
     entry = registry.get(project)
     if entry is None:
@@ -1691,16 +1871,26 @@ def promote_project(
     decision = evaluate_action(policy=policy, action="deploy", environment=target_env)
     if not decision.allowed:
         raise typer.BadParameter(f"Policy blocked promotion action: {decision.reason}")
+    if target_env == "prod":
+        _confirm_destructive_action(
+            f"Confirm promotion for '{entry.project_id}' from {from_env} to {target_env}? ",
+            force=force,
+        )
     orchestrator = _create_deployment_orchestrator(registry_path)
-    result = orchestrator.promote(
-        project_ref=entry.project_id,
-        source_environment=from_env,
-        target_environment=target_env,
-        target=target,
-        execute=execute,
-    )
+    try:
+        result = orchestrator.promote(
+            project_ref=entry.project_id,
+            source_environment=from_env,
+            target_environment=target_env,
+            target=target,
+            execute=execute,
+        )
+    except KeyError as exc:
+        raise typer.BadParameter(str(exc.args[0])) from exc
     console.print(
-        f"Promote {from_env}->{target_env} on {target}: {'ok' if result.success else 'failed'}"
+        "Promote "
+        f"{from_env}->{target_env} on {target}: "
+        f"{'[green]ok[/green]' if result.success else '[red]failed[/red]'}"
     )
     console.print(result.message)
     AuditLogger().log(

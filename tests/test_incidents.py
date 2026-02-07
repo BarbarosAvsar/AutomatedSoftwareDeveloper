@@ -12,6 +12,7 @@ from automated_software_developer.agent.deploy import (
 )
 from automated_software_developer.agent.gitops import GitOpsManager
 from automated_software_developer.agent.incidents.engine import IncidentEngine
+from automated_software_developer.agent.incidents.model import load_incidents
 from automated_software_developer.agent.patching import PatchEngine
 from automated_software_developer.agent.portfolio.registry import PortfolioRegistry
 from automated_software_developer.cli import app
@@ -74,6 +75,47 @@ def test_incident_healing_flow_creates_postmortem(tmp_path: Path) -> None:
 
     assert result.incident.status == "resolved"
     assert result.patch_outcome.success is True
+    assert result.incident.postmortem_path is not None
+    assert Path(result.incident.postmortem_path).exists()
+
+
+def test_incident_detection_and_heal_records_postmortem(tmp_path: Path) -> None:
+    repo = tmp_path / "signal-project"
+    _init_repo(repo)
+    registry_path = tmp_path / "registry.jsonl"
+    incidents_path = tmp_path / "incidents.jsonl"
+    registry = PortfolioRegistry(write_path=registry_path, read_paths=[registry_path])
+    registry.register_project(
+        project_id="signal-1",
+        name="Signal One",
+        domain="ops",
+        platforms=["api_service"],
+        metadata={"local_path": str(repo)},
+    )
+
+    engine = IncidentEngine(
+        registry=registry,
+        patch_engine=PatchEngine(registry=registry),
+        deployment_orchestrator=DeploymentOrchestrator(
+            registry=registry,
+            targets=default_deployment_targets(),
+        ),
+        incidents_path=incidents_path,
+    )
+    incident = engine.detect_from_signals(project_id="signal-1", error_count=6, crash_count=0)
+    assert incident is not None
+
+    result = engine.heal_project(
+        project_ref="signal-1",
+        incident_id=incident.incident_id,
+        auto_push=False,
+        deploy_target=None,
+        environment="staging",
+        execute_deploy=False,
+    )
+
+    records = load_incidents(incidents_path)
+    assert any(record.incident_id == incident.incident_id for record in records)
     assert result.incident.postmortem_path is not None
     assert Path(result.incident.postmortem_path).exists()
 

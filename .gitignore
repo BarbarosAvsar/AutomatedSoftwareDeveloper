@@ -12,6 +12,7 @@ coverage.xml
 
 # Generated output
 output/
+autosd.log
 
 # Virtual env
 .venv/

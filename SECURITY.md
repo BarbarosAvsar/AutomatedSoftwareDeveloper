@@ -1,4 +1,4 @@
-﻿# SECURITY.md
+# SECURITY.md
 
 ## Security Model
 
@@ -11,6 +11,7 @@ Primary controls:
 - secret scanning/redaction for journals/logs/artifacts
 - append-only operational logs for traceability
 - policy + signed preauthorization gating for privileged actions
+- telemetry privacy validation with explicit allowlists
 
 ## Threat Notes
 
@@ -36,6 +37,8 @@ Use human review for high-impact releases.
   - `autosd halt --project <id>`
 - Run healing pipeline and review postmortem:
   - `autosd heal --project <id>`
+- Inspect logs:
+  - `tail -f autosd.log`
 
 ## Verification
 

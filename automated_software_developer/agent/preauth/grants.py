@@ -45,6 +45,24 @@ class PreauthGrant:
         """Return grant id."""
         return str(self.payload["grant_id"])
 
+    def expires_at(self) -> datetime | None:
+        """Return parsed expiry timestamp, if available."""
+        raw = self.payload.get("expires_at")
+        if not isinstance(raw, str):
+            return None
+        try:
+            return datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+
+    def is_expired(self, *, now: datetime | None = None) -> bool:
+        """Return whether the grant is expired as of the provided time."""
+        expiry = self.expires_at()
+        if expiry is None:
+            return True
+        current = now or datetime.now(tz=UTC)
+        return current >= expiry
+
     def to_dict(self) -> dict[str, Any]:
         """Return serialized grant payload."""
         return dict(self.payload)

@@ -1,4 +1,4 @@
-﻿# OPERATIONS.md
+# OPERATIONS.md
 
 ## Safe Autonomy with Preauth Grants
 
@@ -51,27 +51,42 @@ autosd patch --project my-project --auto-push --preauth-grant <grant_id>
 autosd heal --project my-project --target generic_container --preauth-grant <grant_id>
 ```
 
-### 4) Revoke quickly during incidents
+### 4) Review or revoke grants
 
 ```bash
+autosd preauth list --active-only
 autosd preauth revoke <grant_id>
 autosd halt --project my-project
 ```
 
-## Audit Trail
+## Deploy, Rollback, Promote
+
+Destructive actions prompt for confirmation unless `--force` is provided:
+
+```bash
+autosd deploy --project my-project --env prod --target docker --preauth-grant <grant_id> --force
+autosd rollback --project my-project --env staging --target generic_container --force
+autosd promote --project my-project --from staging --to prod --target generic_container --force
+```
+
+## Incident Healing & Postmortems
+
+```bash
+autosd incidents list
+autosd heal --project my-project --target generic_container --env staging
+```
+
+Postmortems are written to `.autosd/postmortems/` inside the project.
+
+## Audit Trail & Logs
 
 Privileged actions are logged to:
 
 - `~/.autosd/audit.log.jsonl`
 
-Records include timestamp, action, project, grant id, result, and references (no secrets).
+Operational debug logs are written to:
 
-## Rollback and Resume
-
-```bash
-autosd rollback --project my-project --env staging --target generic_container
-autosd resume --project my-project
-```
+- `autosd.log` (override with `--log-file`)
 
 ## Routine Verification
 

@@ -120,6 +120,7 @@ def test_prod_deploy_requires_valid_preauth(tmp_path: Path, monkeypatch) -> None
             str(registry_path),
             "--preauth-grant",
             grant_id,
+            "--force",
         ],
     )
     assert allowed.exit_code == 0
