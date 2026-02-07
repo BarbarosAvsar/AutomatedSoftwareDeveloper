@@ -274,7 +274,7 @@ def _validate_workflow_gate(project_dir: Path) -> GateResult:
 def _run_ci_entrypoint(project_dir: Path) -> list[GateResult]:
     """Run the standardized CI entrypoint script."""
     script = project_dir / "ci" / "run_ci.sh"
-    if not script.exists():
+    if not script.is_file():
         return [
             GateResult(
                 name="ci_entrypoint",
@@ -282,7 +282,7 @@ def _run_ci_entrypoint(project_dir: Path) -> list[GateResult]:
                 notes=["ci/run_ci.sh missing"],
             )
         ]
-    return [_run_command("ci_entrypoint", "./ci/run_ci.sh", project_dir)]
+    return [_run_command("ci_entrypoint", "bash ./ci/run_ci.sh", project_dir)]
 
 
 def _run_security_scan(project_dir: Path, fixture: ConformanceFixture) -> GateResult:
