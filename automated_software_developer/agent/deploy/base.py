@@ -9,6 +9,9 @@ from pathlib import Path
 
 from automated_software_developer.agent.portfolio.registry import PortfolioRegistry
 from automated_software_developer.agent.portfolio.schemas import RegistryEntry
+from automated_software_developer.logging_utils import get_logger
+
+LOGGER = get_logger()
 
 
 @dataclass(frozen=True)
@@ -98,6 +101,16 @@ class DeploymentOrchestrator:
         execute: bool,
     ) -> DeploymentResult:
         """Deploy one project to selected target/environment."""
+        LOGGER.info(
+            "Deploy requested",
+            extra={
+                "project_ref": project_ref,
+                "environment": environment,
+                "target": target,
+                "strategy": strategy,
+                "execute": execute,
+            },
+        )
         entry = _require_project(self.registry, project_ref)
         deployment_target = _require_target(self.targets, target)
         resolved_strategy = _normalize_strategy(strategy, deployment_target.supports_canary)
@@ -129,6 +142,23 @@ class DeploymentOrchestrator:
                     "last_deploy_strategy": resolved_strategy,
                 },
             )
+            LOGGER.info(
+                "Deploy succeeded",
+                extra={
+                    "project_id": entry.project_id,
+                    "environment": environment,
+                    "target": target,
+                },
+            )
+        else:
+            LOGGER.warning(
+                "Deploy failed",
+                extra={
+                    "project_id": entry.project_id,
+                    "environment": environment,
+                    "target": target,
+                },
+            )
         return result
 
     def rollback(
@@ -140,6 +170,15 @@ class DeploymentOrchestrator:
         execute: bool,
     ) -> DeploymentResult:
         """Rollback one project deployment on a target."""
+        LOGGER.info(
+            "Rollback requested",
+            extra={
+                "project_ref": project_ref,
+                "environment": environment,
+                "target": target,
+                "execute": execute,
+            },
+        )
         entry = _require_project(self.registry, project_ref)
         deployment_target = _require_target(self.targets, target)
         project_dir = _resolve_project_dir(entry)
@@ -159,6 +198,23 @@ class DeploymentOrchestrator:
                     "last_rollback_at": result.deployed_at,
                 },
             )
+            LOGGER.info(
+                "Rollback succeeded",
+                extra={
+                    "project_id": entry.project_id,
+                    "environment": environment,
+                    "target": target,
+                },
+            )
+        else:
+            LOGGER.warning(
+                "Rollback failed",
+                extra={
+                    "project_id": entry.project_id,
+                    "environment": environment,
+                    "target": target,
+                },
+            )
         return result
 
     def promote(
@@ -171,6 +227,16 @@ class DeploymentOrchestrator:
         execute: bool,
     ) -> DeploymentResult:
         """Promote a deployed version from one environment to another."""
+        LOGGER.info(
+            "Promotion requested",
+            extra={
+                "project_ref": project_ref,
+                "source_environment": source_environment,
+                "target_environment": target_environment,
+                "target": target,
+                "execute": execute,
+            },
+        )
         entry = _require_project(self.registry, project_ref)
         deployment_target = _require_target(self.targets, target)
         project_dir = _resolve_project_dir(entry)
@@ -195,6 +261,23 @@ class DeploymentOrchestrator:
                     "target": target,
                     "version": result.version,
                     "timestamp": result.deployed_at,
+                },
+            )
+            LOGGER.info(
+                "Promotion succeeded",
+                extra={
+                    "project_id": entry.project_id,
+                    "target_environment": target_environment,
+                    "target": target,
+                },
+            )
+        else:
+            LOGGER.warning(
+                "Promotion failed",
+                extra={
+                    "project_id": entry.project_id,
+                    "target_environment": target_environment,
+                    "target": target,
                 },
             )
         return result

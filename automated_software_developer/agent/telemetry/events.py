@@ -117,6 +117,7 @@ class TelemetryEvent:
 def append_event(path: Path, event: TelemetryEvent) -> None:
     """Append one validated telemetry event to JSONL file."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_privacy_safe(event)
     sanitized = _sanitize(event.to_dict())
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(sanitized, ensure_ascii=True))
@@ -161,6 +162,23 @@ def _reject_pii(values: list[str]) -> None:
         for pattern in PII_PATTERNS:
             if pattern.search(value):
                 raise ValueError("Telemetry payload contains prohibited PII-like content.")
+
+
+def _ensure_privacy_safe(event: TelemetryEvent) -> None:
+    """Ensure telemetry event contains only allowed metadata and no PII."""
+    if not set(event.metadata).issubset(ALLOWED_METADATA_KEYS):
+        disallowed = sorted(set(event.metadata) - ALLOWED_METADATA_KEYS)
+        raise ValueError(f"Telemetry metadata contains disallowed keys: {', '.join(disallowed)}")
+    _reject_pii(
+        [
+            event.event_type,
+            event.timestamp,
+            event.metric_name,
+            event.project_id,
+            event.platform or "",
+            *event.metadata.values(),
+        ]
+    )
 
 
 def _sanitize(payload: dict[str, object]) -> dict[str, object]:

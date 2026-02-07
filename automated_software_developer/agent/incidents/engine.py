@@ -15,8 +15,10 @@ from automated_software_developer.agent.incidents.model import (
 )
 from automated_software_developer.agent.patching import PatchEngine, PatchOutcome
 from automated_software_developer.agent.portfolio.registry import PortfolioRegistry
+from automated_software_developer.logging_utils import get_logger
 
 AUTOSD_INCIDENTS_PATH_ENV = "AUTOSD_INCIDENTS_PATH"
+LOGGER = get_logger()
 
 
 @dataclass(frozen=True)
@@ -59,6 +61,15 @@ class IncidentEngine:
             return None
         severity = "high" if crash_count > 0 else "medium"
         summary = f"error_count={error_count}, crash_count={crash_count}"
+        LOGGER.warning(
+            "Incident detected from telemetry signals",
+            extra={
+                "project_id": project_id,
+                "error_count": error_count,
+                "crash_count": crash_count,
+                "severity": severity,
+            },
+        )
         return self.create_incident(
             project_id=project_id,
             source="telemetry",
@@ -85,6 +96,15 @@ class IncidentEngine:
             proposed_fix=proposed_fix,
         )
         append_incident(self.incidents_path, record)
+        LOGGER.info(
+            "Incident recorded",
+            extra={
+                "project_id": project_id,
+                "incident_id": record.incident_id,
+                "source": source,
+                "severity": severity,
+            },
+        )
         return record
 
     def list_incidents(self, project_id: str | None = None) -> list[IncidentRecord]:
@@ -120,6 +140,17 @@ class IncidentEngine:
             raise KeyError(f"Project '{project_ref}' not found.")
 
         incident = self._resolve_or_create_incident(entry.project_id, incident_id)
+        LOGGER.info(
+            "Healing initiated",
+            extra={
+                "project_id": entry.project_id,
+                "incident_id": incident.incident_id,
+                "deploy_target": deploy_target,
+                "environment": environment,
+                "auto_push": auto_push,
+                "execute_deploy": execute_deploy,
+            },
+        )
         reason = (
             f"incident {incident.incident_id}: {incident.signal_summary}. "
             f"{incident.proposed_fix or 'Apply risk-reduced fix and add regression checks.'}"
@@ -175,6 +206,16 @@ class IncidentEngine:
             postmortem_path=str(postmortem_path),
         )
         append_incident(self.incidents_path, updated)
+        LOGGER.info(
+            "Healing complete",
+            extra={
+                "project_id": entry.project_id,
+                "incident_id": incident.incident_id,
+                "status": status,
+                "patch_success": patch_outcome.success,
+                "deploy_success": deploy_outcome.success if deploy_outcome is not None else None,
+            },
+        )
         return HealingResult(
             incident=updated,
             patch_outcome=patch_outcome,

@@ -1,9 +1,9 @@
-﻿# PRIVACY.md
+# PRIVACY.md
 
 ## Telemetry Defaults
 
 - Telemetry is OFF by default.
-- When enabled, data is schema-validated and privacy-preserving.
+- When enabled, data is schema-validated, privacy-preserving, and allowlist-based.
 
 ## Prohibited Data
 
@@ -30,3 +30,18 @@ Default retention is 30 days unless policy changes it.
 
 - project events: `.autosd/telemetry/events.jsonl`
 - local warehouse: `~/.autosd/telemetry.db`
+
+## Examples
+
+Enable or disable telemetry:
+
+```bash
+autosd telemetry enable --project <id> --mode anonymous --retention-days 30
+autosd telemetry enable --project <id> --mode off
+```
+
+Generate a local report:
+
+```bash
+autosd telemetry report --project <id>
+```

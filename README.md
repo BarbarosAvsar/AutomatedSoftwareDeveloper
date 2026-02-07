@@ -1,6 +1,27 @@
-﻿# Automated Software Developer
+# Automated Software Developer
 
 Autonomous software-factory agent for requirements refinement, story-based implementation, quality/security validation, deployment scaffolding, telemetry analytics, incident healing, and policy-gated operations.
+
+## Quick Start
+
+1) Install:
+
+```bash
+python -m pip install -e .[dev]
+```
+
+2) Run an end-to-end workflow:
+
+```bash
+autosd run --requirements-file requirements.md --output-dir output/project
+```
+
+3) Check your version and logs:
+
+```bash
+autosd --version
+tail -f autosd.log
+```
 
 ## Security Posture
 
@@ -83,6 +104,11 @@ autosd rollback --project <id> --env staging --target generic_container
 autosd promote --project <id> --from staging --to prod --target generic_container
 ```
 
+Notes:
+
+- Production deploy/promote and rollback prompts for confirmation unless `--force` is provided.
+- Production deploys require a valid preauth grant (`--preauth-grant`).
+
 Implemented targets:
 
 - `docker`
@@ -95,6 +121,7 @@ Telemetry is OFF by default.
 
 ```bash
 autosd telemetry enable --project <id> --mode anonymous --retention-days 30
+autosd telemetry enable --project <id> --mode off
 autosd telemetry report --project <id>
 autosd telemetry report-all --domain commerce
 ```
@@ -133,7 +160,7 @@ High-risk autonomy uses signed local grants.
 ```bash
 autosd preauth init-keys
 autosd preauth create-grant --project-ids <id> --auto-deploy-prod --expires-in-hours 1
-autosd preauth list
+autosd preauth list --active-only
 autosd preauth show <grant_id>
 autosd preauth revoke <grant_id>
 autosd preauth rotate-keys
@@ -145,6 +172,14 @@ Operational commands support:
 - `--preauth-grant <grant_id>`
 
 Default safety rule: production deploy is blocked unless a valid grant explicitly allows it.
+
+## Observability & Logs
+
+AutoSD writes a local debug log to `autosd.log` (override with `--log-file`).
+
+```bash
+autosd --verbose run --requirements-file requirements.md
+```
 
 ## Learning Model
 

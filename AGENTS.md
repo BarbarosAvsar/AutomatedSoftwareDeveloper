@@ -73,3 +73,8 @@ python -m pytest
 - Prioritize regressions, security gaps, missing edge-case tests, and interface breakage.
 - Keep README/CLI docs aligned with implementation.
 - Ensure new features include deterministic tests.
+
+## Release Documentation Notes
+- Ensure docs cover telemetry defaults, incident/self-healing workflows, and preauth grant management.
+- Keep operational examples current (deploy, rollback, promote, preauth list/revoke, telemetry enable/disable).
+- Mention the local debug log (`autosd.log`) and `--verbose` flag when relevant.

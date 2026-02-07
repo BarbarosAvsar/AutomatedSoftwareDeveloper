@@ -246,6 +246,7 @@ def test_full_simulated_factory_flow(tmp_path: Path, monkeypatch) -> None:
             str(registry_path),
             "--preauth-grant",
             grant.grant_id,
+            "--force",
         ],
     )
     assert allowed.exit_code == 0
