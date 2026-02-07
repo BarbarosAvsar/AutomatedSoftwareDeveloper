@@ -112,14 +112,28 @@ on:
   pull_request:
     branches: [main, master]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: "pyproject.toml"
+      - name: Tool versions
+        run: |
+          python -V
+          python -m pip -V
       - name: Run CI entrypoint
         run: ./ci/run_ci.sh
 """.strip() + "\n"

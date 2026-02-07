@@ -104,5 +104,13 @@ Run the full generator + conformance gate in one step:
 autosd verify-factory
 ```
 
-The report is written to `conformance/report.json`. Use `--verbose` for additional
-debug logging in `autosd.log`.
+The reports are written to `conformance/report.json` and `verify_factory_report.json`.
+Use `--verbose` for additional debug logging in `autosd.log`.
+
+### CI Troubleshooting
+
+- Run the same CI entrypoint locally:
+  - `./ci/run_ci.sh`
+- Lint workflows locally:
+  - `autosd ci lint-workflows`
+- If CI mirror fails, inspect `verify_factory_report.json` for the failing gate.
