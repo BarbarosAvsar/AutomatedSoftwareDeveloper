@@ -15,8 +15,15 @@ class MockProvider:
         self._responses = [deepcopy(item) for item in responses]
         self.prompts: list[tuple[str, str]] = []
 
-    def generate_json(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
+    def generate_json(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        seed: int | None = None,
+    ) -> dict[str, Any]:
         """Return next queued response and record prompts."""
+        _ = seed
         self.prompts.append((system_prompt, user_prompt))
         if not self._responses:
             raise RuntimeError("MockProvider has no remaining responses.")

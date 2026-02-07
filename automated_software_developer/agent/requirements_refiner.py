@@ -94,6 +94,8 @@ class RequirementsRefiner:
         requirements: str,
         repo_guidelines: str | None,
         template: PromptTemplate,
+        *,
+        seed: int | None = None,
     ) -> RefinedRequirements:
         """Generate a refined requirements specification with autonomous assumptions."""
         if not requirements.strip():
@@ -108,6 +110,7 @@ class RequirementsRefiner:
                 repo_guidelines=repo_guidelines,
                 heuristic_notes=heuristics.to_prompt_notes(),
             ),
+            seed=seed,
         )
         normalized = self._normalize_raw_response(response, heuristics)
         refined = RefinedRequirements.from_dict(normalized)

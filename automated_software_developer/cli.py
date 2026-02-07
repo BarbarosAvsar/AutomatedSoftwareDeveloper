@@ -480,6 +480,14 @@ def run(
         table.add_row("Platform Plan", str(summary.platform_plan_path))
     if summary.capability_graph_path is not None:
         table.add_row("Capability Graph", str(summary.capability_graph_path))
+    if summary.architecture_doc_path is not None:
+        table.add_row("Architecture Doc", str(summary.architecture_doc_path))
+    if summary.architecture_components_path is not None:
+        table.add_row("Architecture Components", str(summary.architecture_components_path))
+    if summary.architecture_adrs_path is not None:
+        table.add_row("Architecture ADRs", str(summary.architecture_adrs_path))
+    if summary.build_hash_path is not None:
+        table.add_row("Build Hash", str(summary.build_hash_path))
     console.print(table)
 
     console.print("\nVerification commands:")
