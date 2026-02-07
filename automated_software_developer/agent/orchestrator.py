@@ -8,6 +8,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from automated_software_developer.agent.architecture import (
+    ArchitectureArtifacts,
+    ArchitecturePlanner,
+)
 from automated_software_developer.agent.backlog import (
     STATUS_COMPLETED,
     STATUS_FAILED,
@@ -55,6 +59,11 @@ from automated_software_developer.agent.quality import (
     build_quality_gate_plan,
     evaluate_python_quality,
 )
+from automated_software_developer.agent.reproducibility import (
+    build_artifact_checksums,
+    enforce_lockfiles,
+    write_build_hash,
+)
 from automated_software_developer.agent.requirements_refiner import RequirementsRefiner
 from automated_software_developer.agent.schemas import (
     validate_backlog_payload,
@@ -94,6 +103,9 @@ class AgentConfig:
     design_doc_file: str = ".autosd/design_doc.md"
     platform_plan_file: str = ".autosd/platform_plan.json"
     capability_graph_file: str = ".autosd/capability_graph.json"
+    architecture_doc_file: str = ".autosd/architecture/architecture.md"
+    architecture_components_file: str = ".autosd/architecture/components.json"
+    architecture_adrs_dir: str = ".autosd/architecture/adrs"
     enforce_quality_gates: bool = True
     enforce_docstrings: bool = True
     enable_security_scan: bool = False
@@ -106,6 +118,8 @@ class AgentConfig:
     sbom_mode: str = "if-available"
     prompt_playbook_path: str = "PROMPT_PLAYBOOK.md"
     prompt_changelog_path: str = "PROMPT_TEMPLATE_CHANGES.md"
+    prompt_seed_base: int = 4242
+    build_hash_file: str = ".autosd/provenance/build_hash.json"
 
     def __post_init__(self) -> None:
         """Validate configuration values eagerly."""
@@ -119,6 +133,8 @@ class AgentConfig:
             raise ValueError("security_scan_mode must be one of: off, if-available, required.")
         if self.sbom_mode not in {"off", "if-available", "required"}:
             raise ValueError("sbom_mode must be one of: off, if-available, required.")
+        if self.prompt_seed_base <= 0:
+            raise ValueError("prompt_seed_base must be greater than zero.")
         if self.preferred_platform is not None and not self.preferred_platform.strip():
             raise ValueError("preferred_platform cannot be blank when provided.")
 
@@ -137,6 +153,7 @@ class SoftwareDevelopmentAgent:
         self.config = config or AgentConfig()
         self.planner = Planner(provider)
         self.refiner = RequirementsRefiner(provider)
+        self.architecture_planner = ArchitecturePlanner(provider)
         self.executor = CommandExecutor(timeout_seconds=self.config.command_timeout_seconds)
         self.packaging = PackagingOrchestrator(self.executor)
         self.pattern_store = pattern_store or PromptPatternStore()
@@ -146,6 +163,7 @@ class SoftwareDevelopmentAgent:
         """Run only the requirements refinement stage and persist canonical artifact."""
         if not requirements.strip():
             raise ValueError("requirements must be non-empty.")
+        prompt_seed = self.config.prompt_seed_base if self.config.reproducible else None
         workspace = FileWorkspace(output_dir)
         workspace.ensure_exists()
         self._ensure_agents_md(workspace)
@@ -156,6 +174,7 @@ class SoftwareDevelopmentAgent:
             requirements=requirements,
             repo_guidelines=repo_guidelines,
             template=refinement_template,
+            seed=prompt_seed,
         )
         workspace.write_file(self.config.refined_spec_file, refined.to_markdown())
         return refined
@@ -165,6 +184,7 @@ class SoftwareDevelopmentAgent:
         if not requirements.strip():
             raise ValueError("requirements must be non-empty.")
 
+        prompt_seed = self.config.prompt_seed_base if self.config.reproducible else None
         workspace = FileWorkspace(output_dir)
         workspace.ensure_exists()
         self._ensure_agents_md(workspace)
@@ -177,9 +197,21 @@ class SoftwareDevelopmentAgent:
             requirements=requirements,
             repo_guidelines=repo_guidelines,
             template=refinement_template,
+            seed=prompt_seed,
         )
         refined_markdown = refined.to_markdown()
         workspace.write_file(self.config.refined_spec_file, refined_markdown)
+
+        architecture_plan = self.architecture_planner.create_plan(
+            refined=refined,
+            repo_guidelines=repo_guidelines,
+            seed=prompt_seed,
+        )
+        architecture_artifacts = self.architecture_planner.write_artifacts(
+            architecture_plan,
+            workspace.base_dir,
+        )
+        self._track_architecture_artifacts(workspace, architecture_artifacts)
 
         capability_graph = build_capability_graph()
         workspace.write_file(
@@ -265,6 +297,7 @@ class SoftwareDevelopmentAgent:
                     repo_guidelines=repo_guidelines,
                     template=story_template,
                     journal=journal,
+                    prompt_seed=prompt_seed,
                 )
                 backlog.update_story(
                     story.story_id,
@@ -355,6 +388,20 @@ class SoftwareDevelopmentAgent:
         )
         write_build_manifest(workspace.base_dir, manifest)
         maybe_write_sbom(workspace.base_dir, mode=self.config.sbom_mode)
+        lockfiles = enforce_lockfiles(
+            workspace.base_dir,
+            reproducible=self.config.reproducible,
+        )
+        checksums = build_artifact_checksums(workspace.base_dir)
+        build_hash_path = write_build_hash(
+            workspace.base_dir,
+            checksums=checksums,
+            seed=prompt_seed,
+            lockfiles=lockfiles,
+        )
+        workspace.changed_files.add(
+            str(build_hash_path.relative_to(workspace.base_dir)).replace("\\", "/")
+        )
 
         if self.config.enable_learning:
             learn_from_journals(
@@ -398,6 +445,19 @@ class SoftwareDevelopmentAgent:
                 workspace.base_dir,
                 self.config.capability_graph_file,
             ),
+            architecture_doc_path=ensure_safe_relative_path(
+                workspace.base_dir,
+                self.config.architecture_doc_file,
+            ),
+            architecture_components_path=ensure_safe_relative_path(
+                workspace.base_dir,
+                self.config.architecture_components_file,
+            ),
+            architecture_adrs_path=ensure_safe_relative_path(
+                workspace.base_dir,
+                self.config.architecture_adrs_dir,
+            ),
+            build_hash_path=build_hash_path,
         )
 
     def _execute_story(
@@ -409,6 +469,7 @@ class SoftwareDevelopmentAgent:
         repo_guidelines: str | None,
         template: PromptTemplate,
         journal: PromptJournal,
+        prompt_seed: int | None,
     ) -> StoryExecutionState:
         """Execute one story with bounded retries and journaling."""
         feedback: str | None = story.last_error
@@ -442,6 +503,7 @@ class SoftwareDevelopmentAgent:
                 raw_response = self.provider.generate_json(
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
+                    seed=prompt_seed,
                 )
                 bundle = ExecutionBundle.from_dict(raw_response)
                 self._apply_operations(bundle, workspace)
@@ -507,6 +569,7 @@ class SoftwareDevelopmentAgent:
                     "attempt": attempt,
                     "model_settings": {
                         "provider": type(self.provider).__name__,
+                        "seed": prompt_seed,
                     },
                     "prompt_fingerprint": prompt_fingerprint,
                     "response_fingerprint": hash_text(json.dumps(raw_response, sort_keys=True))
@@ -613,6 +676,9 @@ class SoftwareDevelopmentAgent:
             "design_doc": self.config.design_doc_file,
             "platform_plan": self.config.platform_plan_file,
             "capability_graph": self.config.capability_graph_file,
+            "architecture_doc": self.config.architecture_doc_file,
+            "architecture_components": self.config.architecture_components_file,
+            "architecture_adrs": self.config.architecture_adrs_dir,
             "platform_adapter_id": platform_adapter_id,
             "stories": [
                 {
@@ -701,6 +767,16 @@ class SoftwareDevelopmentAgent:
         """Create default AGENTS.md in generated workspace if absent."""
         if workspace.read_optional("AGENTS.md") is None:
             workspace.write_file("AGENTS.md", DEFAULT_AGENTS_MD)
+
+    def _track_architecture_artifacts(
+        self,
+        workspace: FileWorkspace,
+        artifacts: ArchitectureArtifacts,
+    ) -> None:
+        """Track architecture artifacts in workspace change list."""
+        root = workspace.base_dir.resolve()
+        for path in [artifacts.architecture_doc, artifacts.components_json, *artifacts.adr_files]:
+            workspace.changed_files.add(str(path.relative_to(root)).replace("\\", "/"))
 
 
 def _utc_now() -> str:

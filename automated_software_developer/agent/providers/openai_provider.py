@@ -19,6 +19,7 @@ class OpenAIProvider:
         model: str = "gpt-5.3-codex",
         temperature: float = 0.1,
         max_output_tokens: int = 8_000,
+        seed: int | None = None,
     ) -> None:
         """Initialize provider with API key and model settings."""
         resolved_api_key = api_key or os.getenv("OPENAI_API_KEY")
@@ -28,22 +29,44 @@ class OpenAIProvider:
         self.model = model
         self.temperature = temperature
         self.max_output_tokens = max_output_tokens
+        self.seed = seed
 
-    def generate_json(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
+    def generate_json(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        seed: int | None = None,
+    ) -> dict[str, Any]:
         """Generate structured JSON from the configured model."""
         try:
-            raw_text = self._generate_with_responses_api(system_prompt, user_prompt)
+            raw_text = self._generate_with_responses_api(
+                system_prompt,
+                user_prompt,
+                seed=seed,
+            )
         except Exception:
-            raw_text = self._generate_with_chat_completions_api(system_prompt, user_prompt)
+            raw_text = self._generate_with_chat_completions_api(
+                system_prompt,
+                user_prompt,
+                seed=seed,
+            )
         return _parse_json_response(raw_text)
 
-    def _generate_with_responses_api(self, system_prompt: str, user_prompt: str) -> str:
+    def _generate_with_responses_api(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        seed: int | None = None,
+    ) -> str:
         """Call Responses API and extract text output."""
-        response = self.client.responses.create(
-            model=self.model,
-            temperature=self.temperature,
-            max_output_tokens=self.max_output_tokens,
-            input=[
+        resolved_seed = self.seed if seed is None else seed
+        payload = {
+            "model": self.model,
+            "temperature": self.temperature,
+            "max_output_tokens": self.max_output_tokens,
+            "input": [
                 {
                     "role": "system",
                     "content": [{"type": "input_text", "text": system_prompt}],
@@ -53,24 +76,37 @@ class OpenAIProvider:
                     "content": [{"type": "input_text", "text": user_prompt}],
                 },
             ],
-        )
+        }
+        if resolved_seed is not None:
+            payload["seed"] = resolved_seed
+        response = self.client.responses.create(**payload)  # type: ignore[call-overload]
         extracted = getattr(response, "output_text", None)
         if extracted:
             return str(extracted)
         return _extract_response_text(response)
 
-    def _generate_with_chat_completions_api(self, system_prompt: str, user_prompt: str) -> str:
+    def _generate_with_chat_completions_api(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        seed: int | None = None,
+    ) -> str:
         """Call Chat Completions API fallback and extract text output."""
-        response = self.client.chat.completions.create(
-            model=self.model,
-            temperature=self.temperature,
-            max_completion_tokens=self.max_output_tokens,
-            messages=[
+        resolved_seed = self.seed if seed is None else seed
+        payload = {
+            "model": self.model,
+            "temperature": self.temperature,
+            "max_completion_tokens": self.max_output_tokens,
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            response_format={"type": "json_object"},
-        )
+            "response_format": {"type": "json_object"},
+        }
+        if resolved_seed is not None:
+            payload["seed"] = resolved_seed
+        response = self.client.chat.completions.create(**payload)  # type: ignore[call-overload]
         message = response.choices[0].message.content
         if message is None:
             raise RuntimeError("Model returned empty message content.")

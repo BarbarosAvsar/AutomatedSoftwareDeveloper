@@ -56,6 +56,90 @@ def _normalize_list_dict(value: Any, field_name: str) -> list[dict[str, Any]]:
 
 
 @dataclass(frozen=True)
+class ArchitectureComponent:
+    """Component definition for the architecture plan."""
+
+    component_id: str
+    name: str
+    responsibilities: list[str]
+    interfaces: list[str]
+    dependencies: list[str]
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ArchitectureComponent:
+        """Create an architecture component from JSON."""
+        return cls(
+            component_id=_require_string(data.get("id"), "id"),
+            name=_require_string(data.get("name"), "name"),
+            responsibilities=_require_string_list(
+                data.get("responsibilities", []),
+                "responsibilities",
+            ),
+            interfaces=_require_optional_string_list(data.get("interfaces"), "interfaces"),
+            dependencies=_require_optional_string_list(data.get("dependencies"), "dependencies"),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize component to dict for artifact persistence."""
+        return {
+            "id": self.component_id,
+            "name": self.name,
+            "responsibilities": self.responsibilities,
+            "interfaces": self.interfaces,
+            "dependencies": self.dependencies,
+        }
+
+
+@dataclass(frozen=True)
+class ArchitectureDecision:
+    """ADR entry with decision context and consequences."""
+
+    adr_id: str
+    title: str
+    status: str
+    context: str
+    decision: str
+    consequences: list[str]
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ArchitectureDecision:
+        """Create an ADR entry from JSON."""
+        return cls(
+            adr_id=_require_string(data.get("id"), "id"),
+            title=_require_string(data.get("title"), "title"),
+            status=_require_string(data.get("status"), "status"),
+            context=_require_string(data.get("context"), "context"),
+            decision=_require_string(data.get("decision"), "decision"),
+            consequences=_require_string_list(
+                data.get("consequences", []),
+                "consequences",
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class ArchitecturePlan:
+    """Architecture plan artifact with components and ADRs."""
+
+    overview: str
+    components: list[ArchitectureComponent]
+    decisions: list[ArchitectureDecision]
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ArchitecturePlan:
+        """Create architecture plan from model JSON."""
+        components_raw = _normalize_list_dict(data.get("components"), "components")
+        if not components_raw:
+            raise ValueError("Architecture output must include at least one component.")
+        decisions_raw = _normalize_list_dict(data.get("adrs"), "adrs")
+        return cls(
+            overview=_require_string(data.get("overview"), "overview"),
+            components=[ArchitectureComponent.from_dict(item) for item in components_raw],
+            decisions=[ArchitectureDecision.from_dict(item) for item in decisions_raw],
+        )
+
+
+@dataclass(frozen=True)
 class PlanTask:
     """Represents a single implementation task in the development plan."""
 
@@ -481,3 +565,7 @@ class RunSummary:
     journal_path: Path | None = None
     platform_plan_path: Path | None = None
     capability_graph_path: Path | None = None
+    architecture_doc_path: Path | None = None
+    architecture_components_path: Path | None = None
+    architecture_adrs_path: Path | None = None
+    build_hash_path: Path | None = None

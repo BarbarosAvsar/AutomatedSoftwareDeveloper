@@ -66,10 +66,50 @@ def _refinement_payload() -> dict[str, object]:
     }
 
 
+def _architecture_payload() -> dict[str, object]:
+    return {
+        "overview": "The system is split into an API, storage, and validation layer.",
+        "components": [
+            {
+                "id": "api",
+                "name": "API Service",
+                "responsibilities": ["Expose endpoints", "Coordinate operations"],
+                "interfaces": ["REST"],
+                "dependencies": ["storage", "validation"],
+            },
+            {
+                "id": "storage",
+                "name": "Storage Layer",
+                "responsibilities": ["Persist artifacts"],
+                "interfaces": ["Filesystem"],
+                "dependencies": [],
+            },
+            {
+                "id": "validation",
+                "name": "Validation Service",
+                "responsibilities": ["Validate outputs"],
+                "interfaces": ["Python API"],
+                "dependencies": ["storage"],
+            },
+        ],
+        "adrs": [
+            {
+                "id": "adr-001",
+                "title": "Filesystem storage",
+                "status": "accepted",
+                "context": "Artifacts are lightweight and local.",
+                "decision": "Use filesystem storage for outputs.",
+                "consequences": ["Simpler operations", "Local storage constraints"],
+            }
+        ],
+    }
+
+
 def test_orchestrator_story_retry_and_artifacts(tmp_path: Path) -> None:
     provider = MockProvider(
         responses=[
             _refinement_payload(),
+            _architecture_payload(),
             {
                 "summary": "Initial implementation writes wrong artifact content.",
                 "operations": [
@@ -102,7 +142,11 @@ def test_orchestrator_story_retry_and_artifacts(tmp_path: Path) -> None:
     assert (tmp_path / ".autosd" / "design_doc.md").exists()
     assert (tmp_path / ".autosd" / "platform_plan.json").exists()
     assert (tmp_path / ".autosd" / "capability_graph.json").exists()
+    assert (tmp_path / ".autosd" / "architecture" / "architecture.md").exists()
+    assert (tmp_path / ".autosd" / "architecture" / "components.json").exists()
+    assert (tmp_path / ".autosd" / "architecture" / "adrs" / "adr-001.md").exists()
     assert (tmp_path / ".autosd" / "provenance" / "build_manifest.json").exists()
+    assert (tmp_path / ".autosd" / "provenance" / "build_hash.json").exists()
     assert (tmp_path / ".autosd" / "prompt_journal.jsonl").exists()
     assert (tmp_path / ".autosd" / "sprint_log.jsonl").exists()
 
@@ -116,6 +160,9 @@ def test_orchestrator_story_retry_and_artifacts(tmp_path: Path) -> None:
     assert progress["design_doc"] == ".autosd/design_doc.md"
     assert progress["platform_plan"] == ".autosd/platform_plan.json"
     assert progress["capability_graph"] == ".autosd/capability_graph.json"
+    assert progress["architecture_doc"] == ".autosd/architecture/architecture.md"
+    assert progress["architecture_components"] == ".autosd/architecture/components.json"
+    assert progress["architecture_adrs"] == ".autosd/architecture/adrs"
     assert isinstance(progress["platform_adapter_id"], str)
 
     journal_lines = (

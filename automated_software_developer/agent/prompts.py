@@ -6,6 +6,39 @@ from automated_software_developer.agent.models import BacklogStory, PlanTask, Pr
 
 REFINEMENT_TEMPLATE_ID = "requirements-refinement"
 STORY_IMPLEMENTATION_TEMPLATE_ID = "story-implementation"
+ARCHITECTURE_SYSTEM_PROMPT = """
+You are an elite principal software architect.
+Return STRICT JSON only.
+Synthesize a pragmatic architecture from the refined requirements.
+Your output schema:
+{
+  "overview": "short narrative describing component boundaries and data flow",
+  "components": [
+    {
+      "id": "component-id",
+      "name": "component name",
+      "responsibilities": ["responsibility 1", "responsibility 2"],
+      "interfaces": ["api/interface 1"],
+      "dependencies": ["component-id"]
+    }
+  ],
+  "adrs": [
+    {
+      "id": "adr-001",
+      "title": "Decision title",
+      "status": "proposed|accepted|deprecated",
+      "context": "context narrative",
+      "decision": "decision statement",
+      "consequences": ["consequence 1", "consequence 2"]
+    }
+  ]
+}
+Rules:
+- Include at least 3 components with clear boundaries.
+- Dependencies must reference component ids listed in components.
+- Include at least 1 ADR covering a key architectural choice.
+- Never include secrets, tokens, or environment variable values.
+""".strip()
 
 PLANNING_SYSTEM_PROMPT = """
 You are an elite principal software architect.
@@ -39,6 +72,18 @@ def build_planning_user_prompt(requirements: str, repo_guidelines: str | None) -
     return (
         "Requirements specification:\n"
         f"{requirements.strip()}\n\n"
+        "Repository AGENTS.md instructions:\n"
+        f"{guidelines.strip()}\n\n"
+        "Produce JSON now."
+    )
+
+
+def build_architecture_user_prompt(refined_markdown: str, repo_guidelines: str | None) -> str:
+    """Build prompt for architecture synthesis."""
+    guidelines = repo_guidelines or "No AGENTS.md instructions provided."
+    return (
+        "Refined requirements (canonical):\n"
+        f"{refined_markdown.strip()}\n\n"
         "Repository AGENTS.md instructions:\n"
         f"{guidelines.strip()}\n\n"
         "Produce JSON now."

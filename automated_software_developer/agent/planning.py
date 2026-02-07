@@ -18,11 +18,18 @@ class Planner:
         """Initialize planner with language model provider."""
         self.provider = provider
 
-    def create_plan(self, requirements: str, repo_guidelines: str | None = None) -> DevelopmentPlan:
+    def create_plan(
+        self,
+        requirements: str,
+        repo_guidelines: str | None = None,
+        *,
+        seed: int | None = None,
+    ) -> DevelopmentPlan:
         """Generate and validate a development plan."""
         response = self.provider.generate_json(
             system_prompt=PLANNING_SYSTEM_PROMPT,
             user_prompt=build_planning_user_prompt(requirements, repo_guidelines),
+            seed=seed,
         )
         return DevelopmentPlan.from_dict(response)
 
