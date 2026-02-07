@@ -13,6 +13,8 @@ from rich.table import Table
 
 from automated_software_developer import __version__
 from automated_software_developer.agent.audit import AuditLogger
+from automated_software_developer.agent.daemon import CompanyDaemon, DaemonConfig
+from automated_software_developer.agent.departments.operations import ReleaseManager
 from automated_software_developer.agent.deploy import (
     DeploymentOrchestrator,
     default_deployment_targets,
@@ -1914,6 +1916,122 @@ def promote_project(
     )
     if not result.success:
         raise typer.Exit(code=1)
+
+
+@app.command("release")
+def release_project(
+    project: Annotated[str, typer.Option(help="Project id or name.")],
+    version: Annotated[str, typer.Option(help="Release version tag.")] = "0.1.0",
+    tag: Annotated[str | None, typer.Option(help="Optional git tag name.")] = None,
+    registry_path: Annotated[
+        Path | None,
+        typer.Option("--registry-path", help="Override portfolio registry path."),
+    ] = None,
+) -> None:
+    """Create a release bundle under .autosd/releases/."""
+    registry = _create_registry(registry_path)
+    entry = registry.get(project)
+    if entry is None:
+        raise typer.BadParameter(f"Project '{project}' not found in registry.")
+    project_dir = _resolve_project_path(entry.metadata)
+    if project_dir is None:
+        raise typer.BadParameter("Project path could not be resolved from registry metadata.")
+
+    release_manager = ReleaseManager()
+    bundle = release_manager.create_release(
+        project_dir=project_dir,
+        project_id=entry.project_id,
+        version=version,
+        tag=tag,
+    )
+    console.print("Release bundle created:")
+    console.print(f"- release_id: {bundle.release_id}")
+    console.print(f"- release_dir: {bundle.release_dir}")
+    console.print(f"- manifest: {bundle.manifest_path}")
+
+
+@app.command("daemon")
+def daemon(
+    requirements_dir: Annotated[
+        Path,
+        typer.Option(help="Directory to watch for new requirements files."),
+    ] = Path("requirements"),
+    projects_dir: Annotated[
+        Path,
+        typer.Option(help="Directory to write generated projects."),
+    ] = Path("projects"),
+    registry_path: Annotated[
+        Path,
+        typer.Option(help="Registry JSONL path for portfolio updates."),
+    ] = Path(".autosd_portfolio/registry.jsonl"),
+    incidents_path: Annotated[
+        Path,
+        typer.Option(help="Incident log JSONL path."),
+    ] = Path(".autosd/incidents.jsonl"),
+    incident_signals_path: Annotated[
+        Path | None,
+        typer.Option(help="Optional JSON list of incident signals to process."),
+    ] = None,
+    provider: Annotated[
+        str,
+        typer.Option(help="Model provider to use: openai or mock."),
+    ] = "openai",
+    model: Annotated[
+        str,
+        typer.Option(help="Model name when using OpenAI provider."),
+    ] = "gpt-5.3-codex",
+    mock_responses_file: Annotated[
+        Path | None,
+        typer.Option(help="JSON file of queued responses when provider=mock."),
+    ] = None,
+    environment: Annotated[
+        str,
+        typer.Option(help="Deployment environment to target."),
+    ] = "staging",
+    deploy_target: Annotated[
+        str,
+        typer.Option(help="Deployment target ID."),
+    ] = "generic_container",
+    execute_deploy: Annotated[
+        bool,
+        typer.Option(
+            "--execute-deploy/--scaffold-deploy",
+            help="Execute deploy steps when possible.",
+        ),
+    ] = False,
+    max_cycles: Annotated[
+        int,
+        typer.Option(help="Maximum daemon cycles (0 for infinite)."),
+    ] = 1,
+    interval_seconds: Annotated[
+        int,
+        typer.Option(help="Sleep interval between cycles."),
+    ] = 5,
+) -> None:
+    """Run the non-interactive autonomous company workflow daemon."""
+    resolved_provider = _create_provider(provider, model, mock_responses_file)
+    config = DaemonConfig(
+        requirements_dir=requirements_dir,
+        projects_dir=projects_dir,
+        registry_path=registry_path,
+        incidents_path=incidents_path,
+        incident_signals_path=incident_signals_path,
+        environment=environment,
+        deploy_target=deploy_target,
+        execute_deploy=execute_deploy,
+    )
+    daemon_runner = CompanyDaemon(provider=resolved_provider, config=config)
+    cycles_run = 0
+    while True:
+        processed = daemon_runner.run_once()
+        console.print(f"Daemon cycle complete. Projects processed: {len(processed)}")
+        cycles_run += 1
+        if max_cycles and cycles_run >= max_cycles:
+            break
+        if interval_seconds > 0:
+            import time
+
+            time.sleep(interval_seconds)
 
 
 if __name__ == "__main__":

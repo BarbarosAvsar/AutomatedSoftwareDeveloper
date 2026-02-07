@@ -73,6 +73,28 @@ def _mock_responses() -> list[dict[str, object]]:
             "global_verification_commands": [verify],
         },
         {
+            "overview": "Simple architecture",
+            "components": [
+                {
+                    "id": "core",
+                    "name": "Core",
+                    "responsibilities": ["Write artifact"],
+                    "interfaces": ["cli"],
+                    "dependencies": [],
+                }
+            ],
+            "adrs": [
+                {
+                    "id": "ADR-001",
+                    "title": "Use text file",
+                    "status": "accepted",
+                    "context": "Need simple output",
+                    "decision": "Write artifact.txt",
+                    "consequences": ["Simple IO"],
+                }
+            ],
+        },
+        {
             "summary": "create artifact and readme",
             "operations": [
                 {"op": "write_file", "path": "artifact.txt", "content": "ok\n"},

@@ -34,6 +34,12 @@ class GitOpsManager:
         branch = result.stdout.strip()
         return branch or None
 
+    def current_commit(self, repo_dir: Path) -> str | None:
+        """Return current commit SHA if repository has commits."""
+        result = self._run_git(repo_dir, ["rev-parse", "HEAD"], check=False)
+        commit_sha = result.stdout.strip()
+        return commit_sha or None
+
     def checkout_new_branch(self, repo_dir: Path, branch_name: str) -> None:
         """Create and check out a new branch."""
         self._run_git(repo_dir, ["checkout", "-b", branch_name])
