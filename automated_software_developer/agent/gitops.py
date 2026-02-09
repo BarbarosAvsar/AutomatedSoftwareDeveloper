@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import subprocess
+import shutil
+import subprocess  # nosec B404
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -120,8 +121,11 @@ class GitOpsManager:
         check: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         """Run a git command in repository directory."""
-        completed = subprocess.run(
-            ["git", *args],
+        git_path = shutil.which("git")
+        if git_path is None:
+            raise RuntimeError("git executable not found on PATH.")
+        completed = subprocess.run(  # nosec B603
+            [git_path, *args],
             cwd=str(repo_dir),
             check=False,
             text=True,

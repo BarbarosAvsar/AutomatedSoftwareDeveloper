@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import subprocess  # nosec B404
 from pathlib import Path
 
 from automated_software_developer.agent.deploy.base import (
@@ -44,12 +45,11 @@ class DockerDeploymentTarget(DeploymentTarget):
                 encoding="utf-8",
             )
 
-        if execute and shutil.which("docker") is not None:
-            import subprocess
-
+        docker_path = shutil.which("docker")
+        if execute and docker_path is not None:
             image_tag = f"autosd/{project_dir.name}:{version}"
-            completed = subprocess.run(
-                ["docker", "build", "-t", image_tag, "."],
+            completed = subprocess.run(  # nosec B603
+                [docker_path, "build", "-t", image_tag, "."],
                 cwd=str(project_dir),
                 text=True,
                 capture_output=True,

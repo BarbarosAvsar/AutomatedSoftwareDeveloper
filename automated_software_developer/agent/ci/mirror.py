@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import shlex
-import subprocess
+import subprocess  # nosec B404
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,9 +30,10 @@ def run_ci_mirror(repo_path: Path) -> MirrorResult:
     if not entrypoint.is_file():
         raise ValueError("ci/run_ci.sh missing for CI mirror run.")
     command = "bash ./ci/run_ci.sh"
+    args = ["bash", "./ci/run_ci.sh"]
     start = time.monotonic()
-    result = subprocess.run(
-        shlex.split(command),
+    result = subprocess.run(  # nosec B603
+        args,
         cwd=resolved,
         check=False,
         text=True,

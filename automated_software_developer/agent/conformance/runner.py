@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import shlex
-import subprocess
+import subprocess  # nosec B404
 import time
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -282,7 +281,7 @@ def _run_ci_entrypoint(project_dir: Path) -> list[GateResult]:
                 notes=["ci/run_ci.sh missing"],
             )
         ]
-    return [_run_command("ci_entrypoint", "bash ./ci/run_ci.sh", project_dir)]
+    return [_run_command("ci_entrypoint", ["bash", "./ci/run_ci.sh"], project_dir)]
 
 
 def _run_security_scan(project_dir: Path, fixture: ConformanceFixture) -> GateResult:
@@ -302,7 +301,16 @@ def _run_security_scan(project_dir: Path, fixture: ConformanceFixture) -> GateRe
         return GateResult(name="security_scan", passed=True, notes=["disabled"])
     result = _run_command(
         "security_scan",
-        "python -m bandit -q -r . -x tests,.venv,venv,.git,.autosd",
+        [
+            "python",
+            "-m",
+            "bandit",
+            "-q",
+            "-r",
+            ".",
+            "-x",
+            "tests,.venv,venv,.git,.autosd",
+        ],
         project_dir,
     )
     if fixture.security_scan_mode == "required":
@@ -364,12 +372,12 @@ def _diff_checksums(
     return differences
 
 
-def _run_command(name: str, command: str, cwd: Path) -> GateResult:
+def _run_command(name: str, args: list[str], cwd: Path) -> GateResult:
     """Run a shell command and capture output."""
+    command = " ".join(args)
     start = time.monotonic()
     try:
-        args = shlex.split(command)
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603
             args,
             cwd=cwd,
             check=False,
