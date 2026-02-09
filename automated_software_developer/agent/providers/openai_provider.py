@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import time
 from typing import Any
 
-from openai import OpenAI
+from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLimitError
+
+from automated_software_developer.agent.providers.rate_limit import (
+    RateLimitBackoff,
+    RateLimitEvent,
+    extract_rate_limit_event,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAIProvider:
@@ -20,6 +30,9 @@ class OpenAIProvider:
         temperature: float = 0.1,
         max_output_tokens: int = 8_000,
         seed: int | None = None,
+        max_retries: int = 4,
+        min_retry_seconds: float = 2.0,
+        max_retry_seconds: float = 30.0,
     ) -> None:
         """Initialize provider with API key and model settings."""
         resolved_api_key = api_key or os.getenv("OPENAI_API_KEY")
@@ -30,6 +43,12 @@ class OpenAIProvider:
         self.temperature = temperature
         self.max_output_tokens = max_output_tokens
         self.seed = seed
+        self.backoff = RateLimitBackoff(
+            max_retries=max_retries,
+            min_delay_seconds=min_retry_seconds,
+            max_delay_seconds=max_retry_seconds,
+        )
+        self.last_rate_limit: RateLimitEvent | None = None
 
     def generate_json(
         self,
@@ -39,19 +58,80 @@ class OpenAIProvider:
         seed: int | None = None,
     ) -> dict[str, Any]:
         """Generate structured JSON from the configured model."""
+        last_error: Exception | None = None
+        for attempt in range(1, self.backoff.max_retries + 1):
+            try:
+                raw_text = self._attempt_generation(system_prompt, user_prompt, seed=seed)
+                return _parse_json_response(raw_text)
+            except RateLimitError as exc:
+                last_error = exc
+                self.last_rate_limit = extract_rate_limit_event(exc)
+                delay = self._resolve_retry_delay(attempt, self.last_rate_limit)
+                logger.warning(
+                    "OpenAI rate limit hit; retrying in %.2fs (attempt %s/%s).",
+                    delay,
+                    attempt,
+                    self.backoff.max_retries,
+                )
+                if attempt >= self.backoff.max_retries:
+                    raise
+                time.sleep(delay)
+            except (APIConnectionError, APITimeoutError) as exc:
+                last_error = exc
+                delay = self.backoff.next_delay(attempt=attempt, retry_after=None)
+                logger.warning(
+                    "OpenAI connection error; retrying in %.2fs (attempt %s/%s).",
+                    delay,
+                    attempt,
+                    self.backoff.max_retries,
+                )
+                if attempt >= self.backoff.max_retries:
+                    raise
+                time.sleep(delay)
+            except APIError as exc:
+                last_error = exc
+                status = getattr(exc, "status_code", None)
+                if status == 429:
+                    self.last_rate_limit = extract_rate_limit_event(exc)
+                    delay = self._resolve_retry_delay(attempt, self.last_rate_limit)
+                    logger.warning(
+                        "OpenAI rate limit hit; retrying in %.2fs (attempt %s/%s).",
+                        delay,
+                        attempt,
+                        self.backoff.max_retries,
+                    )
+                    if attempt >= self.backoff.max_retries:
+                        raise
+                    time.sleep(delay)
+                    continue
+                raise
+        raise RuntimeError("OpenAI retries exhausted.") from last_error
+
+    def _attempt_generation(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        seed: int | None = None,
+    ) -> str:
+        """Attempt to generate output using Responses API with fallback."""
         try:
-            raw_text = self._generate_with_responses_api(
+            return self._generate_with_responses_api(
                 system_prompt,
                 user_prompt,
                 seed=seed,
             )
         except Exception:
-            raw_text = self._generate_with_chat_completions_api(
+            return self._generate_with_chat_completions_api(
                 system_prompt,
                 user_prompt,
                 seed=seed,
             )
-        return _parse_json_response(raw_text)
+
+    def _resolve_retry_delay(self, attempt: int, event: RateLimitEvent | None) -> float:
+        """Resolve retry delay from rate limit event or backoff policy."""
+        retry_after = event.retry_after_seconds if event is not None else None
+        return self.backoff.next_delay(attempt=attempt, retry_after=retry_after)
 
     def _generate_with_responses_api(
         self,

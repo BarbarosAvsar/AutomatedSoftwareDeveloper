@@ -95,6 +95,8 @@ Useful `run` flags:
 - `--execute-packaging/--plan-packaging`
 - `--reproducible/--non-reproducible`
 - `--conformance-seed <int>`
+- `--parallel-prompt-workers <int>`
+- `--allow-stale-parallel-prompts/--disallow-stale-parallel-prompts`
 - `--sbom-mode off|if-available|required`
 - `--security-scan --security-scan-mode off|if-available|required`
 - `--gitops-enable --gitops-auto-push --gitops-tag-release`
@@ -131,6 +133,9 @@ autosd projects status --all
 autosd projects retire <project_id>
 autosd dashboard serve --host 127.0.0.1 --port 8765
 ```
+
+Dashboard endpoints include `/health`, `/projects`, `/projects/<id>`, and `/oversight`
+for governance-aware oversight summaries.
 
 ### Patch Engine (single/all)
 

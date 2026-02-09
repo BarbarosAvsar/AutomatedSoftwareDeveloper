@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -93,6 +95,8 @@ DEFAULT_AGENTS_MD = """
 - Never store secrets in `.autosd` artifacts (progress, backlog, sprint log, journals).
 """.strip() + "\n"
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class AgentConfig:
@@ -128,6 +132,8 @@ class AgentConfig:
     prompt_changelog_path: str = "PROMPT_TEMPLATE_CHANGES.md"
     prompt_seed_base: int = 4242
     build_hash_file: str = ".autosd/provenance/build_hash.json"
+    parallel_prompt_workers: int = 1
+    allow_stale_parallel_prompts: bool = False
 
     def __post_init__(self) -> None:
         """Validate configuration values eagerly."""
@@ -145,6 +151,20 @@ class AgentConfig:
             raise ValueError("prompt_seed_base must be greater than zero.")
         if self.preferred_platform is not None and not self.preferred_platform.strip():
             raise ValueError("preferred_platform cannot be blank when provided.")
+        if self.parallel_prompt_workers <= 0:
+            raise ValueError("parallel_prompt_workers must be greater than zero.")
+
+
+@dataclass(frozen=True)
+class StoryPromptPrefetch:
+    """Prefetched story prompt and response for parallel execution."""
+
+    story_id: str
+    system_prompt: str
+    user_prompt: str
+    prompt_fingerprint: str
+    response: dict[str, Any]
+    snapshot_hash: str
 
 
 class SoftwareDevelopmentAgent:
@@ -316,6 +336,15 @@ class SoftwareDevelopmentAgent:
                     f"Blocked stories: {json.dumps(blocked, indent=2)}"
                 )
             sprint_index += 1
+            prefetched_prompts = self._prefetch_story_prompts(
+                workspace=workspace,
+                stories=[backlog.story_by_id(item.story_id) for item in sprint],
+                backlog=backlog,
+                refined_markdown=refined_markdown,
+                repo_guidelines=repo_guidelines,
+                template=story_template,
+                prompt_seed=prompt_seed,
+            )
             for story in sprint:
                 backlog.update_story(
                     story.story_id,
@@ -355,6 +384,7 @@ class SoftwareDevelopmentAgent:
                     template=story_template,
                     journal=journal,
                     prompt_seed=prompt_seed,
+                    prefetched=prefetched_prompts.get(story.story_id),
                 )
                 backlog.update_story(
                     story.story_id,
@@ -517,6 +547,66 @@ class SoftwareDevelopmentAgent:
             build_hash_path=build_hash_path,
         )
 
+    def _prefetch_story_prompts(
+        self,
+        workspace: FileWorkspace,
+        stories: list[BacklogStory],
+        backlog: StoryBacklog,
+        refined_markdown: str,
+        repo_guidelines: str | None,
+        template: PromptTemplate,
+        prompt_seed: int | None,
+    ) -> dict[str, StoryPromptPrefetch]:
+        """Prefetch story prompts in parallel for the next sprint."""
+        if self.config.parallel_prompt_workers <= 1 or len(stories) < 2:
+            return {}
+
+        snapshot = workspace.build_context_snapshot(
+            max_files=self.config.snapshot_max_files,
+            max_chars_per_file=self.config.snapshot_max_chars_per_file,
+        )
+        snapshot_hash = hash_text(snapshot)
+        system_prompt = build_story_implementation_system_prompt(template)
+
+        def _prefetch(story: BacklogStory) -> StoryPromptPrefetch:
+            user_prompt = build_story_implementation_user_prompt(
+                refined_requirements_markdown=refined_markdown,
+                story=story,
+                project_snapshot=snapshot,
+                fallback_verification_commands=backlog.global_verification_commands,
+                previous_attempt_feedback=story.last_error,
+                repo_guidelines=repo_guidelines,
+            )
+            prompt_fingerprint = hash_text(system_prompt + "\n" + user_prompt)
+            response = self.provider.generate_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                seed=prompt_seed,
+            )
+            return StoryPromptPrefetch(
+                story_id=story.story_id,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                prompt_fingerprint=prompt_fingerprint,
+                response=response,
+                snapshot_hash=snapshot_hash,
+            )
+
+        prefetched: dict[str, StoryPromptPrefetch] = {}
+        with ThreadPoolExecutor(max_workers=self.config.parallel_prompt_workers) as executor:
+            future_map = {executor.submit(_prefetch, story): story.story_id for story in stories}
+            for future in as_completed(future_map):
+                story_id = future_map[future]
+                try:
+                    prefetched[story_id] = future.result()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Prefetch failed for story %s: %s",
+                        story_id,
+                        exc,
+                    )
+        return prefetched
+
     def _execute_story(
         self,
         workspace: FileWorkspace,
@@ -527,6 +617,7 @@ class SoftwareDevelopmentAgent:
         template: PromptTemplate,
         journal: PromptJournal,
         prompt_seed: int | None,
+        prefetched: StoryPromptPrefetch | None = None,
     ) -> StoryExecutionState:
         """Execute one story with bounded retries and journaling."""
         feedback: str | None = story.last_error
@@ -539,16 +630,33 @@ class SoftwareDevelopmentAgent:
                 max_files=self.config.snapshot_max_files,
                 max_chars_per_file=self.config.snapshot_max_chars_per_file,
             )
-            system_prompt = build_story_implementation_system_prompt(template)
-            user_prompt = build_story_implementation_user_prompt(
-                refined_requirements_markdown=refined_markdown,
-                story=story,
-                project_snapshot=snapshot,
-                fallback_verification_commands=backlog.global_verification_commands,
-                previous_attempt_feedback=feedback,
-                repo_guidelines=repo_guidelines,
+            snapshot_hash = hash_text(snapshot)
+            prefetch_snapshot_match: bool | None = None
+            use_prefetch = (
+                prefetched is not None
+                and attempt == 1
+                and (
+                    prefetched.snapshot_hash == snapshot_hash
+                    or self.config.allow_stale_parallel_prompts
+                )
             )
-            prompt_fingerprint = hash_text(system_prompt + "\n" + user_prompt)
+            prefetched_data = prefetched if use_prefetch and prefetched is not None else None
+            if prefetched_data is not None:
+                system_prompt = prefetched_data.system_prompt
+                user_prompt = prefetched_data.user_prompt
+                prompt_fingerprint = prefetched_data.prompt_fingerprint
+                prefetch_snapshot_match = prefetched_data.snapshot_hash == snapshot_hash
+            else:
+                system_prompt = build_story_implementation_system_prompt(template)
+                user_prompt = build_story_implementation_user_prompt(
+                    refined_requirements_markdown=refined_markdown,
+                    story=story,
+                    project_snapshot=snapshot,
+                    fallback_verification_commands=backlog.global_verification_commands,
+                    previous_attempt_feedback=feedback,
+                    repo_guidelines=repo_guidelines,
+                )
+                prompt_fingerprint = hash_text(system_prompt + "\n" + user_prompt)
             raw_response: dict[str, Any] | None = None
             bundle: ExecutionBundle | None = None
             commands = default_commands
@@ -557,11 +665,14 @@ class SoftwareDevelopmentAgent:
             quality_result_text: str | None = None
 
             try:
-                raw_response = self.provider.generate_json(
-                    system_prompt=system_prompt,
-                    user_prompt=user_prompt,
-                    seed=prompt_seed,
-                )
+                if prefetched_data is not None:
+                    raw_response = prefetched_data.response
+                else:
+                    raw_response = self.provider.generate_json(
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        seed=prompt_seed,
+                    )
                 bundle = ExecutionBundle.from_dict(raw_response)
                 self._apply_operations(bundle, workspace)
                 quality_plan = build_quality_gate_plan(
@@ -632,6 +743,8 @@ class SoftwareDevelopmentAgent:
                     "response_fingerprint": hash_text(json.dumps(raw_response, sort_keys=True))
                     if raw_response is not None
                     else None,
+                    "prefetch_used": use_prefetch,
+                    "prefetch_snapshot_match": prefetch_snapshot_match,
                     "tool_actions_requested": [
                         {"op": item.op, "path": item.path}
                         for item in (bundle.operations if bundle is not None else [])

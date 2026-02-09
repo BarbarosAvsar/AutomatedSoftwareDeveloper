@@ -88,6 +88,23 @@ Operational debug logs are written to:
 
 - `autosd.log` (override with `--log-file`)
 
+## Parallel Prompt Execution & Rate Limits
+
+Prompt execution can be prefetched in parallel during sprint loops to improve throughput:
+
+```bash
+autosd run --parallel-prompt-workers 4
+```
+
+By default, prefetched prompts are discarded if the workspace changes between prefetch and
+execution. Use `--allow-stale-parallel-prompts` only when you accept the risk of stale
+context (the system will still retry with a fresh prompt if verification fails).
+
+When model rate limits are hit, the OpenAI provider respects `retry-after` or reset
+headers when present, otherwise it uses bounded exponential backoff. Retries are capped,
+so if limits do not reset in time the run will fail fast and surface the last error for
+operator review. Use `--verbose` and `autosd.log` for detailed timing and retry data.
+
 ## Routine Verification
 
 ```bash
