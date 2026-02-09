@@ -390,6 +390,17 @@ def run(
         int,
         typer.Option(help="Maximum stories selected per sprint iteration."),
     ] = 2,
+    parallel_prompt_workers: Annotated[
+        int,
+        typer.Option(help="Parallel worker count for prompt prefetching."),
+    ] = 1,
+    allow_stale_parallel_prompts: Annotated[
+        bool,
+        typer.Option(
+            "--allow-stale-parallel-prompts/--disallow-stale-parallel-prompts",
+            help="Allow parallel prompt prefetch responses even if workspace changed.",
+        ),
+    ] = False,
     enable_learning: Annotated[
         bool,
         typer.Option(
@@ -499,6 +510,10 @@ def run(
     max_task_attempts = _ensure_positive(max_task_attempts, "max-task-attempts")
     timeout_seconds = _ensure_positive(timeout_seconds, "timeout-seconds")
     max_stories_per_sprint = _ensure_positive(max_stories_per_sprint, "max-stories-per-sprint")
+    parallel_prompt_workers = _ensure_positive(
+        parallel_prompt_workers,
+        "parallel-prompt-workers",
+    )
     security_scan_mode = _validate_security_scan_mode(security_scan_mode)
     sbom_mode = _validate_sbom_mode(sbom_mode)
     if conformance_seed is not None:
@@ -520,6 +535,8 @@ def run(
         prompt_seed_base=conformance_seed
         if conformance_seed is not None
         else AgentConfig().prompt_seed_base,
+        parallel_prompt_workers=parallel_prompt_workers,
+        allow_stale_parallel_prompts=allow_stale_parallel_prompts,
     )
     agent = SoftwareDevelopmentAgent(provider=resolved_provider, config=config)
 

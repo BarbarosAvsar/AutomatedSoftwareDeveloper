@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import unquote, urlparse
 
+from automated_software_developer.agent.policy.engine import DEFAULT_BASE_POLICY
 from automated_software_developer.agent.portfolio.registry import PortfolioRegistry
 from automated_software_developer.agent.portfolio.schemas import DeployRecord, RegistryEntry
 from automated_software_developer.agent.security import redact_sensitive_text
@@ -45,6 +46,14 @@ def resolve_dashboard_request(registry: PortfolioRegistry, path: str) -> tuple[i
             for entry in registry.list_entries(include_archived=True)
         ]
         return 200, {"projects": projects, "count": len(projects)}
+    if parsed.path == "/oversight":
+        status_rows = registry.status_rows(include_archived=True)
+        return 200, {
+            "status": "ok",
+            "projects": status_rows,
+            "count": len(status_rows),
+            "governance": {"baseline_policy": DEFAULT_BASE_POLICY},
+        }
     if parsed.path.startswith("/projects/"):
         project_id = unquote(parsed.path.split("/projects/", maxsplit=1)[1]).strip()
         if not project_id:
