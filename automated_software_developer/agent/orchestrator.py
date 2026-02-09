@@ -833,7 +833,8 @@ class SoftwareDevelopmentAgent:
         """Track architecture artifacts in workspace change list."""
         root = workspace.base_dir.resolve()
         for path in [artifacts.architecture_doc, artifacts.components_json, *artifacts.adr_files]:
-            workspace.changed_files.add(str(path.relative_to(root)).replace("\\", "/"))
+            resolved = path.resolve()
+            workspace.changed_files.add(str(resolved.relative_to(root)).replace("\\", "/"))
 
     def _now(self) -> str:
         """Return deterministic timestamp when reproducible mode is enabled."""
