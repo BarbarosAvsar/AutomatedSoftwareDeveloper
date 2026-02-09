@@ -88,6 +88,15 @@ Operational debug logs are written to:
 
 - `autosd.log` (override with `--log-file`)
 
+## Policy Visibility
+
+Inspect resolved policy and preauth status (read-only):
+
+```bash
+autosd policy show --project my-project
+autosd policy show --preauth-grant <grant_id> --env prod
+```
+
 ## Parallel Prompt Execution & Rate Limits
 
 Prompt execution can be prefetched in parallel during sprint loops to improve throughput:

@@ -30,6 +30,11 @@ from automated_software_developer.agent.backlog import (
     parse_acceptance_criteria_assertions,
     resolve_story_commands,
 )
+from automated_software_developer.agent.config_validation import (
+    require_positive_int,
+    validate_sbom_mode,
+    validate_security_scan_mode,
+)
 from automated_software_developer.agent.design_doc import build_design_doc_markdown
 from automated_software_developer.agent.executor import CommandExecutor
 from automated_software_developer.agent.filesystem import FileWorkspace
@@ -65,9 +70,13 @@ from automated_software_developer.agent.provenance import (
 )
 from automated_software_developer.agent.providers.base import LLMProvider
 from automated_software_developer.agent.quality import (
+    QualityGateCacheEntry,
     QualityGateResult,
     build_quality_gate_plan,
+    compute_quality_gate_fingerprint,
     evaluate_python_quality,
+    load_quality_gate_cache,
+    save_quality_gate_cache,
 )
 from automated_software_developer.agent.reproducibility import (
     build_artifact_checksums,
@@ -137,22 +146,15 @@ class AgentConfig:
 
     def __post_init__(self) -> None:
         """Validate configuration values eagerly."""
-        if self.max_task_attempts <= 0:
-            raise ValueError("max_task_attempts must be greater than zero.")
-        if self.command_timeout_seconds <= 0:
-            raise ValueError("command_timeout_seconds must be greater than zero.")
-        if self.max_stories_per_sprint <= 0:
-            raise ValueError("max_stories_per_sprint must be greater than zero.")
-        if self.security_scan_mode not in {"off", "if-available", "required"}:
-            raise ValueError("security_scan_mode must be one of: off, if-available, required.")
-        if self.sbom_mode not in {"off", "if-available", "required"}:
-            raise ValueError("sbom_mode must be one of: off, if-available, required.")
-        if self.prompt_seed_base <= 0:
-            raise ValueError("prompt_seed_base must be greater than zero.")
+        require_positive_int(self.max_task_attempts, "max_task_attempts")
+        require_positive_int(self.command_timeout_seconds, "command_timeout_seconds")
+        require_positive_int(self.max_stories_per_sprint, "max_stories_per_sprint")
+        validate_security_scan_mode(self.security_scan_mode)
+        validate_sbom_mode(self.sbom_mode)
+        require_positive_int(self.prompt_seed_base, "prompt_seed_base")
         if self.preferred_platform is not None and not self.preferred_platform.strip():
             raise ValueError("preferred_platform cannot be blank when provided.")
-        if self.parallel_prompt_workers <= 0:
-            raise ValueError("parallel_prompt_workers must be greater than zero.")
+        require_positive_int(self.parallel_prompt_workers, "parallel_prompt_workers")
 
 
 @dataclass(frozen=True)
@@ -432,14 +434,17 @@ class SoftwareDevelopmentAgent:
             enable_security_scan=self.config.enable_security_scan,
             security_scan_mode=self.config.security_scan_mode,
         )
-        final_commands = _dedupe_commands(
-            [
-                *final_quality_plan.format_commands,
-                *final_quality_plan.verification_commands,
-                *backlog.global_verification_commands,
-            ]
+        quality_commands = _dedupe_commands(
+            [*final_quality_plan.format_commands, *final_quality_plan.verification_commands]
         )
-        final_results = self.executor.run_many(final_commands, cwd=workspace.base_dir)
+        quality_results, _ = self._run_quality_gate_commands(workspace, quality_commands)
+        remaining_commands = _dedupe_commands(list(backlog.global_verification_commands))
+        final_commands = [*quality_commands, *remaining_commands]
+        if quality_results and not all(result.passed for result in quality_results):
+            final_results = quality_results
+        else:
+            remaining_results = self.executor.run_many(remaining_commands, cwd=workspace.base_dir)
+            final_results = [*quality_results, *remaining_results]
         if not final_results or final_results[-1].exit_code != 0:
             raise RuntimeError(
                 "Final verification failed.\n" + self._format_command_results(final_results)
@@ -470,6 +475,7 @@ class SoftwareDevelopmentAgent:
             commit_sha=None,
             tag=None,
             gates_run=[*final_commands, *packaging_result.commands],
+            gate_results=self._serialize_gate_results(final_results),
             reproducible=self.config.reproducible,
             tool_versions=gather_tool_versions(),
         )
@@ -663,6 +669,7 @@ class SoftwareDevelopmentAgent:
             error_text: str | None = None
             quality_warnings: list[str] = []
             quality_result_text: str | None = None
+            quality_cached = False
 
             try:
                 if prefetched_data is not None:
@@ -682,14 +689,25 @@ class SoftwareDevelopmentAgent:
                     security_scan_mode=self.config.security_scan_mode,
                 )
                 quality_warnings = quality_plan.warnings
-                commands = _dedupe_commands(
-                    [
-                        *quality_plan.format_commands,
-                        *quality_plan.verification_commands,
-                        *(bundle.verification_commands or default_commands),
-                    ]
+                quality_commands = _dedupe_commands(
+                    [*quality_plan.format_commands, *quality_plan.verification_commands]
                 )
-                last_results = self.executor.run_many(commands, cwd=workspace.base_dir)
+                quality_results, quality_cached = self._run_quality_gate_commands(
+                    workspace,
+                    quality_commands,
+                )
+                verification_commands = _dedupe_commands(
+                    list(bundle.verification_commands or default_commands)
+                )
+                commands = [*quality_commands, *verification_commands]
+                if quality_results and not all(result.passed for result in quality_results):
+                    last_results = quality_results
+                else:
+                    verification_results = self.executor.run_many(
+                        verification_commands,
+                        cwd=workspace.base_dir,
+                    )
+                    last_results = [*quality_results, *verification_results]
 
                 static_quality = evaluate_python_quality(
                     workspace.base_dir,
@@ -754,6 +772,7 @@ class SoftwareDevelopmentAgent:
                     "failing_checks": failing_checks,
                     "error": error_text,
                     "quality_warnings": quality_warnings,
+                    "quality_cache_hit": quality_cached,
                     "fix_iteration": attempt - 1,
                 }
             )
@@ -909,15 +928,25 @@ class SoftwareDevelopmentAgent:
         if not results:
             return "No verification commands executed."
         lines: list[str] = []
+        any_failure = False
         for result in results:
             lines.append(f"$ {result.command}")
             lines.append(f"exit_code={result.exit_code}")
+            lines.append(f"duration_seconds={result.duration_seconds:.2f}")
+            if result.exit_code != 0:
+                any_failure = True
+                hints = self._command_failure_hints(result)
+                if hints:
+                    lines.append("hints:")
+                    lines.extend(f"- {item}" for item in hints)
             if result.stdout.strip():
                 lines.append("stdout:")
                 lines.append(result.stdout.strip()[-2_000:])
             if result.stderr.strip():
                 lines.append("stderr:")
                 lines.append(result.stderr.strip()[-2_000:])
+        if any_failure:
+            lines.append("hint: rerun with --verbose and inspect autosd.log for details.")
         return "\n".join(lines)
 
     def _format_quality_findings(self, result: QualityGateResult) -> str:
@@ -932,6 +961,25 @@ class SoftwareDevelopmentAgent:
             lines.append("Docstring violations:")
             lines.extend(f"- {item}" for item in doc_violations)
         return "\n".join(lines)
+
+    def _command_failure_hints(self, result: CommandResult) -> list[str]:
+        """Derive actionable hints from command failures."""
+        if result.exit_code == 0:
+            return []
+        combined = f"{result.stdout}\n{result.stderr}".lower()
+        hints: list[str] = []
+        if "no module named" in combined or "command not found" in combined:
+            if "ruff" in result.command:
+                hints.append("Install ruff (python -m pip install ruff) or disable quality gates.")
+            if "mypy" in result.command:
+                hints.append("Install mypy (python -m pip install mypy) or adjust mypy config.")
+            if "pytest" in result.command:
+                hints.append("Install pytest (python -m pip install pytest) or update test scope.")
+            if "bandit" in result.command:
+                hints.append("Install bandit or set --security-scan-mode if-available.")
+        if "permission denied" in combined:
+            hints.append("Check filesystem permissions for generated project files.")
+        return hints
 
     def _ensure_agents_md(self, workspace: FileWorkspace) -> None:
         """Create default AGENTS.md in generated workspace if absent."""
@@ -954,6 +1002,84 @@ class SoftwareDevelopmentAgent:
         if self.config.reproducible:
             return "1970-01-01T00:00:00+00:00"
         return datetime.now(tz=UTC).isoformat()
+
+    def _run_quality_gate_commands(
+        self,
+        workspace: FileWorkspace,
+        commands: list[str],
+    ) -> tuple[list[CommandResult], bool]:
+        """Run quality gate commands with cache support."""
+        if not commands:
+            return [], False
+        config_payload = {
+            "enforce_quality_gates": self.config.enforce_quality_gates,
+            "enable_security_scan": self.config.enable_security_scan,
+            "security_scan_mode": self.config.security_scan_mode,
+            "enforce_docstrings": self.config.enforce_docstrings,
+        }
+        fingerprint = compute_quality_gate_fingerprint(
+            workspace.base_dir,
+            commands=commands,
+            config=config_payload,
+        )
+        cache = load_quality_gate_cache(workspace.base_dir)
+        if (
+            cache is not None
+            and cache.fingerprint == fingerprint
+            and cache.commands == commands
+            and cache.results
+            and all(result.passed for result in cache.results)
+        ):
+            return self._mark_cached_results(cache.results), True
+
+        results = self.executor.run_many(commands, cwd=workspace.base_dir)
+        if results and all(result.passed for result in results):
+            post_fingerprint = compute_quality_gate_fingerprint(
+                workspace.base_dir,
+                commands=commands,
+                config=config_payload,
+            )
+            save_quality_gate_cache(
+                workspace.base_dir,
+                QualityGateCacheEntry(
+                    fingerprint=post_fingerprint,
+                    commands=commands,
+                    results=results,
+                ),
+            )
+        return results, False
+
+    def _mark_cached_results(self, results: list[CommandResult]) -> list[CommandResult]:
+        """Annotate cached command results for visibility."""
+        cached_results: list[CommandResult] = []
+        for item in results:
+            note = "cached: previous success\n"
+            stdout = item.stdout
+            if note not in stdout:
+                stdout = f"{note}{stdout}".strip()
+            cached_results.append(
+                CommandResult(
+                    command=item.command,
+                    exit_code=item.exit_code,
+                    stdout=stdout,
+                    stderr=item.stderr,
+                    duration_seconds=item.duration_seconds,
+                )
+            )
+        return cached_results
+
+    def _serialize_gate_results(self, results: list[CommandResult]) -> list[dict[str, Any]]:
+        """Serialize gate results for provenance reporting."""
+        output: list[dict[str, Any]] = []
+        for item in results:
+            output.append(
+                {
+                    "command": item.command,
+                    "exit_code": item.exit_code,
+                    "duration_seconds": item.duration_seconds,
+                }
+            )
+        return output
 
 
 def _dedupe_commands(commands: list[str]) -> list[str]:

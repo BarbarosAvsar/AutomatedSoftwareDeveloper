@@ -74,6 +74,7 @@ class ReleaseManager:
                 commit_sha=None,
                 tag=tag,
                 gates_run=[],
+                gate_results=[],
                 reproducible=False,
                 tool_versions=gather_tool_versions(),
             )
