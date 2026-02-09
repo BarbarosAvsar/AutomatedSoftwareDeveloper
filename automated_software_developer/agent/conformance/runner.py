@@ -310,7 +310,7 @@ def _run_security_scan(project_dir: Path, fixture: ConformanceFixture) -> GateRe
             "-r",
             ".",
             "-x",
-            "tests,.venv,venv,.git,.autosd",
+            "tests,./tests,.venv,./.venv,venv,./venv,.git,./.git,.autosd,./.autosd",
         ],
         project_dir,
     )
