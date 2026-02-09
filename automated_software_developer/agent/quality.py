@@ -72,7 +72,8 @@ def build_quality_gate_plan(
     if scan_enabled:
         if _module_available("bandit"):
             verification_commands.append(
-                "python -m bandit -q -r . -x tests,.venv,venv,.git,.autosd"
+                "python -m bandit -q -r . -x "
+                "tests,./tests,.venv,./.venv,venv,./venv,.git,./.git,.autosd,./.autosd"
             )
         elif security_scan_mode == "required":
             raise RuntimeError("Security scan mode is 'required' but bandit is not installed.")
