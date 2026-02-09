@@ -132,3 +132,33 @@ def test_preauth_active_only_list_filters_revoked(tmp_path: Path, monkeypatch) -
     result = runner.invoke(app, ["preauth", "list", "--active-only"])
     assert result.exit_code == 0
     assert "No grants matched" in result.stdout
+
+
+def test_policy_show_writes_snapshot(tmp_path: Path) -> None:
+    registry_path = tmp_path / "registry.jsonl"
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    registry = PortfolioRegistry(write_path=registry_path, read_paths=[registry_path])
+    registry.register_project(
+        project_id="policy-proj",
+        name="Policy Project",
+        domain="ops",
+        platforms=["cli_tool"],
+        metadata={"local_path": str(project_dir)},
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "policy",
+            "show",
+            "--project",
+            "policy-proj",
+            "--registry-path",
+            str(registry_path),
+        ],
+    )
+    assert result.exit_code == 0
+    assert "Policy Snapshot" in result.stdout
+    assert (project_dir / ".autosd" / "policy_resolved.json").exists()

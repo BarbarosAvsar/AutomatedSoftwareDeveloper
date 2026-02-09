@@ -20,8 +20,11 @@ class BuildManifest:
     commit_sha: str | None
     tag: str | None
     gates_run: list[str]
+    gate_results: list[dict[str, Any]]
     reproducible: bool
     tool_versions: dict[str, str]
+    policy_snapshot_hash: str | None = None
+    grant_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize build manifest object."""
@@ -31,8 +34,11 @@ class BuildManifest:
             "commit_sha": self.commit_sha,
             "tag": self.tag,
             "gates_run": self.gates_run,
+            "gate_results": self.gate_results,
             "reproducible": self.reproducible,
             "tool_versions": self.tool_versions,
+            "policy_snapshot_hash": self.policy_snapshot_hash,
+            "grant_id": self.grant_id,
         }
 
 

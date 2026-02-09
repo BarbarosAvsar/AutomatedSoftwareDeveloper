@@ -39,6 +39,11 @@ from automated_software_developer.agent.agile.sprint_engine import (
 from automated_software_developer.agent.audit import AuditLogger
 from automated_software_developer.agent.ci.mirror import run_ci_mirror
 from automated_software_developer.agent.ci.workflow_lint import lint_workflows
+from automated_software_developer.agent.config_validation import (
+    require_positive_int,
+    validate_sbom_mode,
+    validate_security_scan_mode,
+)
 from automated_software_developer.agent.conformance.runner import (
     ConformanceConfig,
     run_conformance_suite,
@@ -94,6 +99,7 @@ backlog_app = typer.Typer(no_args_is_help=True)
 sprint_app = typer.Typer(no_args_is_help=True)
 plugins_app = typer.Typer(no_args_is_help=True)
 ci_app = typer.Typer(no_args_is_help=True)
+policy_app = typer.Typer(no_args_is_help=True)
 console = Console()
 
 app.add_typer(projects_app, name="projects")
@@ -105,6 +111,7 @@ app.add_typer(backlog_app, name="backlog")
 app.add_typer(sprint_app, name="sprint")
 app.add_typer(plugins_app, name="plugins")
 app.add_typer(ci_app, name="ci")
+app.add_typer(policy_app, name="policy")
 
 
 def _version_callback(value: bool) -> None:
@@ -166,25 +173,26 @@ def _create_provider(
 
 def _ensure_positive(value: int, field_name: str) -> int:
     """Validate positive integer CLI values."""
-    if value <= 0:
-        raise typer.BadParameter(f"{field_name} must be greater than zero.")
-    return value
+    try:
+        return require_positive_int(value, field_name)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 def _validate_security_scan_mode(value: str) -> str:
     """Validate security scan mode option."""
-    allowed = {"off", "if-available", "required"}
-    if value not in allowed:
-        raise typer.BadParameter("security-scan-mode must be one of: off, if-available, required.")
-    return value
+    try:
+        return validate_security_scan_mode(value)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 def _validate_sbom_mode(value: str) -> str:
     """Validate SBOM mode option."""
-    allowed = {"off", "if-available", "required"}
-    if value not in allowed:
-        raise typer.BadParameter("sbom-mode must be one of: off, if-available, required.")
-    return value
+    try:
+        return validate_sbom_mode(value)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 def _run_gate_command(args: list[str]) -> tuple[bool, float]:
@@ -326,6 +334,119 @@ def _resolve_verified_grant(
     if not verification.valid:
         raise typer.BadParameter(f"Preauthorization verification failed: {verification.reason}")
     return verification.grant
+
+
+@policy_app.command("show")
+def policy_show(
+    project: Annotated[
+        str | None,
+        typer.Option("--project", help="Optional project ID or name for scope checks."),
+    ] = None,
+    preauth_grant: Annotated[
+        str | None,
+        typer.Option("--preauth-grant", help="Optional grant ID to introspect."),
+    ] = None,
+    environment: Annotated[
+        str | None,
+        typer.Option("--env", help="Optional environment for grant scope checks."),
+    ] = None,
+    registry_path: Annotated[
+        Path | None,
+        typer.Option(help="Optional registry JSONL path override."),
+    ] = None,
+) -> None:
+    """Show resolved policy and optional preauthorization grant status."""
+    project_id: str | None = None
+    project_dir: Path | None = None
+    if project is not None:
+        registry = _create_registry(registry_path)
+        entry = registry.get(project)
+        if entry is None:
+            raise typer.BadParameter(f"Project '{project}' not found.")
+        project_id = entry.project_id
+        project_dir = _resolve_project_path(entry.metadata)
+
+    grant_result = None
+    grant = None
+    if preauth_grant is not None:
+        grant_result = verify_grant(
+            grant_id=preauth_grant,
+            project_id=project_id,
+            environment=environment,
+        )
+        grant = grant_result.grant if grant_result.valid else None
+
+    policy = resolve_effective_policy(project_policy=None, grant=grant)
+    if project_dir is not None:
+        _write_policy_snapshot(project_dir, policy.to_dict())
+
+    policy_table = Table(title="Policy Snapshot")
+    policy_table.add_column("Area")
+    policy_table.add_column("Settings")
+    telemetry = policy.payload.get("telemetry", {})
+    deployment = policy.payload.get("deployment", {})
+    gitops = policy.payload.get("gitops", {})
+    app_store = policy.payload.get("app_store", {})
+    budgets = policy.payload.get("budgets", {})
+    policy_table.add_row(
+        "telemetry",
+        f"mode={telemetry.get('mode')} retention_days={telemetry.get('retention_days')}",
+    )
+    policy_table.add_row(
+        "deployment",
+        (
+            f"dev={deployment.get('allow_dev')} "
+            f"staging={deployment.get('allow_staging')} "
+            f"prod={deployment.get('allow_prod')} "
+            f"canary_required={deployment.get('require_canary_for_prod')}"
+        ),
+    )
+    policy_table.add_row(
+        "gitops",
+        f"auto_push={gitops.get('auto_push')} auto_merge={gitops.get('auto_merge')}",
+    )
+    policy_table.add_row(
+        "app_store",
+        f"publish_enabled={app_store.get('publish_enabled')}",
+    )
+    policy_table.add_row(
+        "budgets",
+        json.dumps(budgets, indent=2),
+    )
+    console.print(policy_table)
+
+    if preauth_grant is not None:
+        grant_table = Table(title="Preauth Grant Status")
+        grant_table.add_column("Field")
+        grant_table.add_column("Value")
+        if grant_result is None:
+            grant_table.add_row("status", "unknown")
+        elif not grant_result.valid:
+            grant_table.add_row("status", "invalid")
+            grant_table.add_row("reason", grant_result.reason)
+            if grant_result.grant is not None:
+                grant_table.add_row("grant_id", grant_result.grant.grant_id)
+        else:
+            grant_table.add_row("status", "valid")
+            grant_table.add_row("grant_id", grant.grant_id if grant else "unknown")
+            expires_at = grant.expires_at() if grant else None
+            grant_table.add_row(
+                "expires_at",
+                expires_at.isoformat() if expires_at else "unknown",
+            )
+            grant_table.add_row(
+                "break_glass",
+                "true" if grant_break_glass(grant) else "false",
+            )
+            if grant is not None:
+                capabilities = grant.payload.get("capabilities", {})
+                enabled = sorted(
+                    key for key, value in capabilities.items() if isinstance(value, bool) and value
+                )
+                grant_table.add_row("capabilities", ", ".join(enabled) or "none")
+        console.print(grant_table)
+        if grant_result is not None and not grant_result.valid:
+            raise typer.Exit(code=1)
 
 
 @app.callback()

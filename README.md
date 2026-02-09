@@ -199,6 +199,13 @@ Local warehouse:
 
 - `~/.autosd/telemetry.db`
 
+### Policy Introspection
+
+```bash
+autosd policy show --project <project_id>
+autosd policy show --preauth-grant <grant_id> --env prod
+```
+
 ### Incidents / Self-Healing
 
 ```bash

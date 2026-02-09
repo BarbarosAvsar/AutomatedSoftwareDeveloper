@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from automated_software_developer.agent.models import CommandResult
 from automated_software_developer.agent.quality import (
+    QualityGateCacheEntry,
     build_quality_gate_plan,
+    compute_quality_gate_fingerprint,
     evaluate_python_quality,
+    load_quality_gate_cache,
+    save_quality_gate_cache,
 )
 
 
@@ -50,3 +55,50 @@ def test_quality_static_passes_when_docstrings_present(tmp_path: Path) -> None:
     )
     result = evaluate_python_quality(tmp_path, enforce_docstrings=True)
     assert result.passed
+
+
+def test_quality_gate_cache_roundtrip(tmp_path: Path) -> None:
+    (tmp_path / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    commands = ["python -m ruff check ."]
+    config = {
+        "enforce_quality_gates": True,
+        "enable_security_scan": False,
+        "security_scan_mode": "if-available",
+        "enforce_docstrings": True,
+    }
+    fingerprint = compute_quality_gate_fingerprint(tmp_path, commands=commands, config=config)
+    entry = QualityGateCacheEntry(
+        fingerprint=fingerprint,
+        commands=commands,
+        results=[
+            CommandResult(
+                command=commands[0],
+                exit_code=0,
+                stdout="ok",
+                stderr="",
+                duration_seconds=0.1,
+            )
+        ],
+    )
+    save_quality_gate_cache(tmp_path, entry)
+    loaded = load_quality_gate_cache(tmp_path)
+    assert loaded is not None
+    assert loaded.fingerprint == fingerprint
+    assert loaded.commands == commands
+    assert loaded.results[0].command == commands[0]
+
+
+def test_quality_gate_fingerprint_changes_when_files_change(tmp_path: Path) -> None:
+    file_path = tmp_path / "app.py"
+    file_path.write_text("print('ok')\n", encoding="utf-8")
+    commands = ["python -m ruff check ."]
+    config = {
+        "enforce_quality_gates": True,
+        "enable_security_scan": False,
+        "security_scan_mode": "if-available",
+        "enforce_docstrings": True,
+    }
+    before = compute_quality_gate_fingerprint(tmp_path, commands=commands, config=config)
+    file_path.write_text("print('changed')\n", encoding="utf-8")
+    after = compute_quality_gate_fingerprint(tmp_path, commands=commands, config=config)
+    assert before != after
