@@ -340,7 +340,7 @@ def _deserialize_command_result(payload: dict[str, Any]) -> CommandResult | None
         return None
     if not isinstance(stdout, str) or not isinstance(stderr, str):
         return None
-    if not isinstance(duration, (int, float)):
+    if not isinstance(duration, int | float):
         return None
     return CommandResult(
         command=command,

@@ -1070,13 +1070,15 @@ class SoftwareDevelopmentAgent:
 
     def _serialize_gate_results(self, results: list[CommandResult]) -> list[dict[str, Any]]:
         """Serialize gate results for provenance reporting."""
+        duration_override = 0.0 if self.config.reproducible else None
         output: list[dict[str, Any]] = []
         for item in results:
+            duration = duration_override if duration_override is not None else item.duration_seconds
             output.append(
                 {
                     "command": item.command,
                     "exit_code": item.exit_code,
-                    "duration_seconds": item.duration_seconds,
+                    "duration_seconds": duration,
                 }
             )
         return output
