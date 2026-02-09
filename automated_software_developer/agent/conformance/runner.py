@@ -102,8 +102,6 @@ def _run_fixture(fixture: ConformanceFixture, cfg: ConformanceConfig) -> Fixture
     adapter_id = _resolve_adapter_id(run1_dir, fixture.expected_adapter_id)
     gates.extend(_validate_project_files(run1_dir, fixture, adapter_id))
     gates.append(_validate_workflow_gate(run1_dir))
-    gates.extend(_run_ci_entrypoint(run1_dir))
-    gates.append(_run_security_scan(run1_dir, fixture))
 
     diff_result: DiffResult | None = None
     if cfg.diff_check:
@@ -113,6 +111,9 @@ def _run_fixture(fixture: ConformanceFixture, cfg: ConformanceConfig) -> Fixture
             run2_dir=run2_dir,
             cfg=cfg,
         )
+
+    gates.extend(_run_ci_entrypoint(run1_dir))
+    gates.append(_run_security_scan(run1_dir, fixture))
 
     return FixtureResult(
         fixture_id=fixture.fixture_id,
