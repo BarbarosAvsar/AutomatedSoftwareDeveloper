@@ -21,6 +21,18 @@ LOCKFILE_CANDIDATES = (
     "composer.lock",
 )
 
+IGNORED_ARTIFACT_DIRS = {
+    ".git",
+    ".ruff_cache",
+    ".mypy_cache",
+    ".pytest_cache",
+    "__pycache__",
+    "dist",
+    "build",
+    ".venv",
+    "venv",
+}
+
 
 def derive_prompt_seed(prompt_fingerprint: str, base_seed: int) -> int:
     """Derive a stable seed for a prompt from its fingerprint."""
@@ -57,7 +69,7 @@ def build_artifact_checksums(project_dir: Path) -> dict[str, str]:
         if not path.is_file():
             continue
         relative = path.relative_to(project_dir)
-        if relative.parts and relative.parts[0] == ".git":
+        if _should_ignore_artifact(relative):
             continue
         if relative.as_posix() == ".autosd/provenance/build_hash.json":
             continue
@@ -113,3 +125,10 @@ def _hash_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(8192), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _should_ignore_artifact(relative: Path) -> bool:
+    """Return True when a file should be excluded from reproducibility checks."""
+    if any(part in IGNORED_ARTIFACT_DIRS for part in relative.parts):
+        return True
+    return any(part.endswith(".egg-info") for part in relative.parts)

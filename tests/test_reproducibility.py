@@ -38,3 +38,24 @@ def test_build_hash_is_deterministic(tmp_path: Path) -> None:
     )
 
     assert _read_build_hash(first_path) == _read_build_hash(second_path)
+
+
+def test_build_artifact_checksums_ignores_ephemeral_artifacts(tmp_path: Path) -> None:
+    (tmp_path / "main.py").write_text("print('ok')\n", encoding="utf-8")
+    (tmp_path / ".ruff_cache").mkdir()
+    (tmp_path / ".ruff_cache" / "cache").write_text("ruff\n", encoding="utf-8")
+    (tmp_path / ".mypy_cache").mkdir()
+    (tmp_path / ".mypy_cache" / "cache").write_text("mypy\n", encoding="utf-8")
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "artifact.whl").write_text("dist\n", encoding="utf-8")
+    egg_info = tmp_path / "sample.egg-info"
+    egg_info.mkdir()
+    (egg_info / "PKG-INFO").write_text("metadata\n", encoding="utf-8")
+
+    checksums = build_artifact_checksums(tmp_path)
+
+    assert "main.py" in checksums
+    assert ".ruff_cache/cache" not in checksums
+    assert ".mypy_cache/cache" not in checksums
+    assert "dist/artifact.whl" not in checksums
+    assert "sample.egg-info/PKG-INFO" not in checksums
