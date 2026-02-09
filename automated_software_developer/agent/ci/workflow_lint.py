@@ -63,7 +63,7 @@ def lint_workflows(root: Path) -> list[WorkflowLintResult]:
 def validate_workflow(path: Path) -> list[str]:
     """Validate workflow YAML and enforce CI safety rules."""
     try:
-        data = yaml.load(
+        data = yaml.load(  # nosec B506
             path.read_text(encoding="utf-8"),
             Loader=UniqueKeyLoader,  # noqa: S506
         )

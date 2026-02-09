@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-import shlex
-import subprocess
+import subprocess  # nosec B404
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -188,10 +187,10 @@ def _validate_sbom_mode(value: str) -> str:
     return value
 
 
-def _run_gate_command(command: str) -> tuple[bool, float]:
+def _run_gate_command(args: list[str]) -> tuple[bool, float]:
     """Run a shell command for gate enforcement and return success/duration."""
     start = time.monotonic()
-    result = subprocess.run(shlex.split(command), check=False)
+    result = subprocess.run(args, check=False)  # nosec B603
     duration = time.monotonic() - start
     return result.returncode == 0, duration
 
@@ -640,12 +639,13 @@ def verify_factory(
     }
     if not skip_generator_gates:
         gates = [
-            "python -m ruff check .",
-            "python -m mypy automated_software_developer",
-            "python -m pytest",
+            ["python", "-m", "ruff", "check", "."],
+            ["python", "-m", "mypy", "automated_software_developer"],
+            ["python", "-m", "pytest"],
         ]
-        for command in gates:
-            passed, duration = _run_gate_command(command)
+        for args in gates:
+            command = " ".join(args)
+            passed, duration = _run_gate_command(args)
             status = "PASS" if passed else "FAIL"
             console.print(f"[{status}] {command} ({duration:.2f}s)")
             verify_report["generator_gates"].append(

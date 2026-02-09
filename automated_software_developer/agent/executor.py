@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-import subprocess
+import subprocess  # nosec B404
 import time
 from pathlib import Path
 
@@ -31,7 +31,7 @@ class CommandExecutor:
         else:
             shell_command = ["bash", "-lc", command]
 
-        completed = subprocess.run(  # noqa: S603
+        completed = subprocess.run(  # noqa: S603  # nosec B603
             shell_command,
             cwd=str(cwd),
             text=True,
