@@ -1,6 +1,54 @@
 import { Button } from "../components/ui/button";
 import ConsoleLayout from "../components/layout/ConsoleLayout";
 
+type CardData = {
+  heading: string;
+  description: string;
+};
+
+const REQUIREMENTS_ITEMS = [
+  "Problem / Goals",
+  "Functional requirements",
+  "Non-functional requirements",
+  "Acceptance criteria",
+] as const;
+
+const SAFETY_CHECKS = [
+  "Requirements locked before launch.",
+  "Policy + preauth snapshot stored.",
+  "Secrets redaction enforced.",
+] as const;
+
+const PLAN_PREVIEW_CARDS: readonly CardData[] = [
+  {
+    heading: "Architecture",
+    description: "Event-driven UI + API + Orchestrator",
+  },
+  {
+    heading: "ETA Range",
+    description: "Most likely: 2–4 days · Wide: 1–7 days",
+  },
+];
+
+function PreviewCard({ heading, description }: CardData) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/40 p-4 text-sm">
+      <p className="text-xs uppercase text-white/40">{heading}</p>
+      <p className="mt-2 text-white/70">{description}</p>
+    </div>
+  );
+}
+
+function BulletList({ items }: { items: readonly string[] }) {
+  return (
+    <ul className="mt-4 space-y-3 text-sm text-white/60">
+      {items.map((item) => (
+        <li key={item}>• {item}</li>
+      ))}
+    </ul>
+  );
+}
+
 export default function NewProjectPage() {
   return (
     <ConsoleLayout
@@ -53,10 +101,9 @@ export default function NewProjectPage() {
           <div className="mt-4 rounded-xl border border-white/10 bg-black/40 p-4 text-sm">
             <p className="text-xs uppercase text-white/40">Requirements Draft</p>
             <ul className="mt-3 space-y-2 text-white/70">
-              <li>• Problem / Goals</li>
-              <li>• Functional requirements</li>
-              <li>• Non-functional requirements</li>
-              <li>• Acceptance criteria</li>
+              {REQUIREMENTS_ITEMS.map((item) => (
+                <li key={item}>• {item}</li>
+              ))}
             </ul>
           </div>
           <div className="mt-4 flex flex-wrap gap-3">
@@ -76,14 +123,9 @@ export default function NewProjectPage() {
             Review architecture, sprint plan, risks, and ETA range before launch.
           </p>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-white/10 bg-black/40 p-4 text-sm">
-              <p className="text-xs uppercase text-white/40">Architecture</p>
-              <p className="mt-2 text-white/70">Event-driven UI + API + Orchestrator</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-black/40 p-4 text-sm">
-              <p className="text-xs uppercase text-white/40">ETA Range</p>
-              <p className="mt-2 text-white/70">Most likely: 2–4 days · Wide: 1–7 days</p>
-            </div>
+            {PLAN_PREVIEW_CARDS.map((card) => (
+              <PreviewCard key={card.heading} {...card} />
+            ))}
           </div>
           <div className="mt-6">
             <Button size="lg" className="glow w-full">
@@ -95,11 +137,7 @@ export default function NewProjectPage() {
         <section className="grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl border border-white/10 bg-panel p-6">
             <h3 className="text-sm font-semibold">Safety Checks</h3>
-            <ul className="mt-4 space-y-3 text-sm text-white/60">
-              <li>• Requirements locked before launch.</li>
-              <li>• Policy + preauth snapshot stored.</li>
-              <li>• Secrets redaction enforced.</li>
-            </ul>
+            <BulletList items={SAFETY_CHECKS} />
           </div>
           <div className="rounded-2xl border border-white/10 bg-panel p-6">
             <h3 className="text-sm font-semibold">Privacy &amp; Data</h3>
