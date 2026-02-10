@@ -21,6 +21,12 @@ LOCKFILE_CANDIDATES = (
     "composer.lock",
 )
 
+IGNORED_REPRODUCIBILITY_PATHS = {
+    ".autosd/sprint_log.jsonl",
+    ".autosd/prompt_journal.jsonl",
+    ".autosd/provenance/quality_gate_cache.json",
+}
+
 IGNORED_ARTIFACT_DIRS = {
     ".git",
     ".ruff_cache",
@@ -129,6 +135,9 @@ def _hash_file(path: Path) -> str:
 
 def _should_ignore_artifact(relative: Path) -> bool:
     """Return True when a file should be excluded from reproducibility checks."""
+    relative_posix = relative.as_posix()
+    if relative_posix in IGNORED_REPRODUCIBILITY_PATHS:
+        return True
     if any(part in IGNORED_ARTIFACT_DIRS for part in relative.parts):
         return True
     return any(part.endswith(".egg-info") for part in relative.parts)

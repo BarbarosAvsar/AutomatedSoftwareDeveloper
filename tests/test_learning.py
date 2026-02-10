@@ -86,3 +86,24 @@ def test_learning_proposes_without_applying_when_updates_disabled(tmp_path: Path
     assert len(summary.proposals) == 1
     assert len(summary.updates) == 0
     assert pattern_store.load_latest("requirements-refinement").version == 2
+
+
+def test_load_latest_uses_cache_after_first_read(tmp_path: Path, monkeypatch) -> None:
+    pattern_store = PromptPatternStore(base_dir=tmp_path / "patterns")
+    pattern_store.ensure_defaults()
+
+    read_count = 0
+    original_read_text = Path.read_text
+
+    def _counted_read_text(self: Path, *args: object, **kwargs: object) -> str:
+        nonlocal read_count
+        read_count += 1
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", _counted_read_text)
+
+    first = pattern_store.load_latest("story-implementation")
+    second = pattern_store.load_latest("story-implementation")
+
+    assert first.version == second.version
+    assert read_count == 1

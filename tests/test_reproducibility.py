@@ -59,3 +59,24 @@ def test_build_artifact_checksums_ignores_ephemeral_artifacts(tmp_path: Path) ->
     assert ".mypy_cache/cache" not in checksums
     assert "dist/artifact.whl" not in checksums
     assert "sample.egg-info/PKG-INFO" not in checksums
+
+
+def test_build_artifact_checksums_ignores_autosd_runtime_logs(tmp_path: Path) -> None:
+    (tmp_path / ".autosd" / "provenance").mkdir(parents=True)
+    (tmp_path / ".autosd" / "sprint_log.jsonl").write_text('{"event":"a"}\n', encoding="utf-8")
+    (tmp_path / ".autosd" / "prompt_journal.jsonl").write_text('{"event":"b"}\n', encoding="utf-8")
+    (tmp_path / ".autosd" / "provenance" / "quality_gate_cache.json").write_text(
+        "{}",
+        encoding="utf-8",
+    )
+    (tmp_path / ".autosd" / "provenance" / "build_manifest.json").write_text(
+        "{}",
+        encoding="utf-8",
+    )
+
+    checksums = build_artifact_checksums(tmp_path)
+
+    assert ".autosd/sprint_log.jsonl" not in checksums
+    assert ".autosd/prompt_journal.jsonl" not in checksums
+    assert ".autosd/provenance/quality_gate_cache.json" not in checksums
+    assert ".autosd/provenance/build_manifest.json" in checksums

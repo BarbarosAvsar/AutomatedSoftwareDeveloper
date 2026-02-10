@@ -7,6 +7,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
+from functools import lru_cache
 from typing import Any
 
 
@@ -79,8 +80,9 @@ def extract_rate_limit_event(error: Any) -> RateLimitEvent | None:
 
 def _first_header(headers: Any, keys: list[str]) -> str | None:
     """Return first matching header value for the given keys."""
+    lowered_map = {str(key).lower(): value for key, value in headers.items()}
     for key in keys:
-        value = headers.get(key)
+        value = lowered_map.get(key.lower())
         if value:
             return str(value)
     return None
@@ -127,7 +129,7 @@ def _parse_http_date(value: str) -> datetime | None:
 
 def _parse_duration_seconds(value: str) -> float | None:
     """Parse a duration like '1s', '250ms', '2m' into seconds."""
-    match = re.match(r"^(?P<number>\\d+(?:\\.\\d+)?)(?P<unit>ms|s|m|h)?$", value)
+    match = _duration_pattern().match(value.strip().lower())
     if not match:
         return None
     number = float(match.group("number"))
@@ -139,3 +141,9 @@ def _parse_duration_seconds(value: str) -> float | None:
     if unit == "h":
         return number * 3600.0
     return number
+
+
+@lru_cache(maxsize=1)
+def _duration_pattern() -> re.Pattern[str]:
+    """Compile duration parser regex once for repeated parsing calls."""
+    return re.compile(r"^(?P<number>\d+(?:\.\d+)?)(?P<unit>ms|s|m|h)?$")
