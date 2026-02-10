@@ -102,9 +102,14 @@ class PromptPatternStore:
             base_dir = Path(__file__).resolve().parent / "prompt_patterns"
         self.base_dir = base_dir
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        self._defaults_ensured = False
+        self._latest_template_cache: dict[str, PromptTemplate] = {}
 
     def ensure_defaults(self) -> None:
         """Create or upgrade baseline template files when needed."""
+        if self._defaults_ensured:
+            return
+        wrote_defaults = False
         for template_id, payload in DEFAULT_PATTERN_DEFINITIONS.items():
             latest = self._find_latest_path(template_id)
             default_version = int(payload["version"])
@@ -120,6 +125,7 @@ class PromptPatternStore:
                         "constraints": payload["constraints"],
                     },
                 )
+                wrote_defaults = True
                 continue
             current_version = self._parse_filename(latest.name)[1]
             if current_version >= default_version:
@@ -135,6 +141,10 @@ class PromptPatternStore:
                     "constraints": payload["constraints"],
                 },
             )
+            wrote_defaults = True
+        self._defaults_ensured = True
+        if wrote_defaults:
+            self._latest_template_cache.clear()
 
     def list_template_ids(self) -> list[str]:
         """Return discovered template ids sorted by name."""
@@ -147,17 +157,22 @@ class PromptPatternStore:
     def load_latest(self, template_id: str) -> PromptTemplate:
         """Load the latest version of a template."""
         self.ensure_defaults()
+        cached = self._latest_template_cache.get(template_id)
+        if cached is not None:
+            return cached
         latest_path = self._find_latest_path(template_id)
         if latest_path is None:
             raise ValueError(f"Template '{template_id}' not found.")
         payload = json.loads(latest_path.read_text(encoding="utf-8"))
-        return PromptTemplate(
+        template = PromptTemplate(
             template_id=str(payload["template_id"]),
             version=int(payload["version"]),
             directives=[str(item) for item in payload["directives"]],
             retry_directives=[str(item) for item in payload["retry_directives"]],
             constraints=[str(item) for item in payload["constraints"]],
         )
+        self._latest_template_cache[template_id] = template
+        return template
 
     def load_all_latest(self) -> dict[str, PromptTemplate]:
         """Load latest templates for all template ids."""
@@ -208,6 +223,7 @@ class PromptPatternStore:
         """Write a template payload to disk as JSON."""
         output_path = self.base_dir / f"{template_id}.v{version}.json"
         output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        self._latest_template_cache.pop(template_id, None)
         return output_path
 
     def _parse_filename(self, filename: str) -> tuple[str, int]:
