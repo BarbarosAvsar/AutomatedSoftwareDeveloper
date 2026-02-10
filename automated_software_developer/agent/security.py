@@ -41,6 +41,27 @@ SENSITIVE_KEYWORDS: Final[tuple[str, ...]] = (
     "access_key",
 )
 
+SENSITIVE_KEY_PATTERN: Final[str] = (
+    r"[A-Za-z0-9_.-]*(?:token|secret|api[_-]?key|password|passphrase|"
+    r"private[_-]?key|access[_-]?key)[A-Za-z0-9_.-]*"
+)
+
+_SENSITIVE_INLINE_VALUE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    rf"(?i)(\b{SENSITIVE_KEY_PATTERN}\b)(\s*[:=]\s*)([^\s,;]+)"
+)
+_SENSITIVE_QUOTED_VALUE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    rf"(?i)(\b{SENSITIVE_KEY_PATTERN}\b)(\s*[:=]\s*)(\"[^\"]*\"|'[^']*')"
+)
+_SENSITIVE_QUERY_PARAM_PATTERN: Final[re.Pattern[str]] = re.compile(
+    rf"(?i)([?&]{SENSITIVE_KEY_PATTERN}=)[^&#\s]+"
+)
+_BASIC_AUTH_HEADER_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"(?i)(authorization\s*:\s*basic\s+)[A-Za-z0-9+/=]+"
+)
+_X_API_KEY_HEADER_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"(?i)(x-api-key\s*:\s*)[^\s]+"
+)
+
 
 def ensure_safe_relative_path(base_dir: Path, relative_path: str) -> Path:
     """Resolve and validate that relative_path stays within base_dir."""
@@ -93,6 +114,18 @@ def is_probably_sensitive_key(key: str) -> bool:
     return any(keyword in lowered for keyword in SENSITIVE_KEYWORDS)
 
 
+def _redact_sensitive_key_value_pairs(text: str) -> str:
+    """Redact sensitive key-value patterns while preserving delimiter formatting."""
+
+    def _replace_match(match: re.Match[str]) -> str:
+        return f"{match.group(1)}{match.group(2)}[REDACTED:value]"
+
+    redacted = _SENSITIVE_INLINE_VALUE_PATTERN.sub(_replace_match, text)
+    redacted = _SENSITIVE_QUOTED_VALUE_PATTERN.sub(_replace_match, redacted)
+    redacted = _SENSITIVE_QUERY_PARAM_PATTERN.sub(r"\1[REDACTED:value]", redacted)
+    return redacted
+
+
 def redact_sensitive_text(text: str) -> str:
     """Replace secret-like values with redaction placeholders."""
     redacted = text
@@ -110,6 +143,9 @@ def redact_sensitive_text(text: str) -> str:
         r"\1:'[REDACTED:value]'",
         redacted,
     )
+    redacted = _redact_sensitive_key_value_pairs(redacted)
+    redacted = _BASIC_AUTH_HEADER_PATTERN.sub(r"\1[REDACTED:value]", redacted)
+    redacted = _X_API_KEY_HEADER_PATTERN.sub(r"\1[REDACTED:value]", redacted)
     redacted = re.sub(
         r"(?i)(https?://[^:\s]+:)[^@\s/]+@",
         r"\1[REDACTED:value]@",
