@@ -37,6 +37,14 @@ export default function DashboardPage() {
         </Link>
       }
     >
+      <section className="mb-6 rounded-2xl border border-cyan-300/25 bg-cyan-400/5 p-6">
+        <h2 className="text-lg font-semibold">Guided workspace for first-time users</h2>
+        <p className="mt-2 text-sm text-white/70">
+          Use <span className="text-white">New Project</span> for a step-by-step flow with built-in
+          explanations of each setting, safety guardrail, and deployment choice.
+        </p>
+      </section>
+
       <section className="grid gap-6">
         {sampleProjects.map((project) => (
           <div

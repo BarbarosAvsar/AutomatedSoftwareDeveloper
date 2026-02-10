@@ -110,6 +110,41 @@ export default function ProjectPage() {
             <p>[10:44] SEC · Scanning dependencies</p>
           </div>
         </section>
+
+        <section className="rounded-2xl border border-white/10 bg-panel p-6">
+          <h2 className="text-lg font-semibold">Settings Reference</h2>
+          <p className="mt-2 text-sm text-white/60">
+            Not sure what a control means? Use this quick reference before changing project
+            behavior.
+          </p>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-white/10 bg-black/40 p-4 text-sm text-white/70">
+              <p className="font-medium text-white">Pause / Resume</p>
+              <p className="mt-2">
+                Pause stops autonomous actions safely. Resume continues from the latest validated
+                state.
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/40 p-4 text-sm text-white/70">
+              <p className="font-medium text-white">Cancel</p>
+              <p className="mt-2">
+                Cancel ends the current run and keeps artifacts for audit and restart planning.
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/40 p-4 text-sm text-white/70">
+              <p className="font-medium text-white">Open Workspace</p>
+              <p className="mt-2">
+                Opens requirements, backlog, and logs in one place so you can inspect decisions.
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/40 p-4 text-sm text-white/70">
+              <p className="font-medium text-white">Status badge</p>
+              <p className="mt-2">
+                Running means autonomous execution is active. Switch to Pause for manual review.
+              </p>
+            </div>
+          </div>
+        </section>
       </div>
     </ConsoleLayout>
   );
