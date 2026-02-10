@@ -140,3 +140,32 @@ Use `--verbose` for additional debug logging in `autosd.log`.
 - Lint workflows locally:
   - `autosd ci lint-workflows`
 - If CI mirror fails, inspect `verify_factory_report.json` for the failing gate.
+
+
+## Operational SLOs / SLIs
+
+Track these baseline service indicators for autonomous runs and incident handling:
+
+- **Run Success SLI**: percentage of `autosd run` executions that complete without failed stories.
+  - **SLO target**: >= 95% over rolling 7 days.
+- **Verification Pass SLI**: percentage of release-gated checks (`ruff`, `mypy`, `pytest`, `verify-factory`) that pass on first attempt.
+  - **SLO target**: >= 90% over rolling 14 days.
+- **Policy Enforcement SLI**: percentage of privileged operations that require and validate preauth grants when policy requires it.
+  - **SLO target**: 100% (no bypasses).
+- **Incident Recovery SLI**: time-to-recovery for auto-heal or manual rollback from incident open to mitigated state.
+  - **SLO target**: p95 <= 30 minutes.
+
+Record metrics in sprint retrospectives and incident postmortems for trend review.
+
+## CLI Error Codes and Remediation
+
+Common CLI validation errors include stable codes to speed troubleshooting:
+
+- `AUTOSD-PREAUTH-REQUIRED`: privileged command requires a grant.
+  - Remediation: create a signed grant (`autosd preauth create-grant`) and pass `--preauth-grant`.
+- `AUTOSD-PREAUTH-INVALID`: grant verification failed (revoked/expired/scope/capability mismatch).
+  - Remediation: run `autosd preauth list --active-only`, then retry with a valid grant.
+- `AUTOSD-ENV-INVALID`: invalid deploy environment value.
+  - Remediation: use `--env dev|staging|prod`.
+- `AUTOSD-TARGET-ENV-INVALID`: invalid promotion target environment.
+  - Remediation: use `--to dev|staging|prod`.

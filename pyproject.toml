@@ -33,7 +33,8 @@ dev = [
   "types-PyYAML>=6.0.12.20240311"
 ]
 security = [
-  "bandit>=1.7.9"
+  "bandit>=1.7.9",
+  "pip-audit>=2.7.3"
 ]
 
 [project.scripts]
@@ -48,7 +49,7 @@ include = ["automated_software_developer*"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-addopts = "-q"
+addopts = "-q --cov=automated_software_developer --cov-report=term-missing --cov-fail-under=79"
 testpaths = ["tests"]
 
 [tool.ruff]
@@ -65,5 +66,16 @@ ignore = ["S603", "S607"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-ignore_missing_imports = true
 exclude = ["tests/"]
+
+[[tool.mypy.overrides]]
+module = [
+  "openai",
+  "openai.*",
+  "pypdf",
+  "cryptography",
+  "cryptography.*",
+  "uvicorn",
+  "uvicorn.*",
+]
+ignore_missing_imports = true
