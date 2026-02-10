@@ -55,3 +55,32 @@ def test_redact_sensitive_text_covers_bearer_jwt_and_basic_auth_url() -> None:
     assert "supersecret" not in redacted
     assert "abcdefghijklmnopqrstuvwxyz123456" not in redacted
     assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.signature" not in redacted
+
+
+def test_redact_sensitive_text_covers_common_assignment_and_header_patterns() -> None:
+    sample = (
+        "db_password: hunter2\n"
+        "ACCESS_TOKEN = xyz-token-value\n"
+        "X-API-Key: ultra-secret\n"
+        "Authorization: Basic dXNlcjpzdXBlcnNlY3JldA==\n"
+        "https://example.com?api_key=abc123&mode=fast"
+    )
+    redacted = redact_sensitive_text(sample)
+    assert "hunter2" not in redacted
+    assert "xyz-token-value" not in redacted
+    assert "ultra-secret" not in redacted
+    assert "dXNlcjpzdXBlcnNlY3JldA==" not in redacted
+    assert "api_key=abc123" not in redacted
+
+
+def test_redact_sensitive_text_preserves_delimiter_formatting() -> None:
+    sample = "db_password: hunter2\nACCESS_TOKEN = xyz-token-value"
+    redacted = redact_sensitive_text(sample)
+    assert "db_password: [REDACTED:value]" in redacted
+    assert "ACCESS_TOKEN = [REDACTED:value]" in redacted
+
+
+def test_redact_sensitive_text_does_not_redact_non_sensitive_query_params() -> None:
+    sample = "https://example.com?mode=fast&limit=10"
+    redacted = redact_sensitive_text(sample)
+    assert redacted == sample
