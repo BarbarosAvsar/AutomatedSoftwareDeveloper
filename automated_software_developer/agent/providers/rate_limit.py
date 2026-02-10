@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import secrets
 from dataclasses import dataclass
@@ -30,8 +31,25 @@ class RateLimitBackoff:
     max_delay_seconds: float = 30.0
     jitter_ratio: float = 0.15
 
+    def __post_init__(self) -> None:
+        """Validate configuration values for predictable retry behavior."""
+        if self.max_retries < 0:
+            raise ValueError("max_retries must be non-negative")
+        if self.min_delay_seconds <= 0:
+            raise ValueError("min_delay_seconds must be greater than zero")
+        if self.max_delay_seconds < self.min_delay_seconds:
+            raise ValueError(
+                "max_delay_seconds must be greater than or equal to min_delay_seconds"
+            )
+        if not 0 <= self.jitter_ratio <= 1:
+            raise ValueError("jitter_ratio must be between 0 and 1 inclusive")
+
     def next_delay(self, *, attempt: int, retry_after: float | None) -> float:
         """Return delay in seconds for given attempt and optional retry-after."""
+        if attempt < 1:
+            raise ValueError("attempt must be greater than or equal to 1")
+        if retry_after is not None and (retry_after < 0 or not math.isfinite(retry_after)):
+            raise ValueError("retry_after must be a non-negative finite number")
         base: float = self.min_delay_seconds * (2 ** (attempt - 1))
         bounded: float = min(base, self.max_delay_seconds)
         if retry_after is not None:
