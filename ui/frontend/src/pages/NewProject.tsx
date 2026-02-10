@@ -6,6 +6,13 @@ type CardData = {
   description: string;
 };
 
+type WorkflowStep = {
+  title: string;
+  whyItMatters: string;
+  humanAction: string;
+  timing: string;
+};
+
 const REQUIREMENTS_ITEMS = [
   "Problem / Goals",
   "Functional requirements",
@@ -53,6 +60,41 @@ const PLAN_PREVIEW_CARDS: readonly CardData[] = [
   },
 ];
 
+const WORKFLOW_STEPS: readonly WorkflowStep[] = [
+  {
+    title: "Capture context",
+    whyItMatters: "Better context reduces rework and lowers hallucination risk.",
+    humanAction: "Confirm user goals, constraints, and compliance requirements.",
+    timing: "Before requirements are drafted",
+  },
+  {
+    title: "Review generated requirements",
+    whyItMatters: "AI drafts are useful, but your corrections make the build accurate.",
+    humanAction: "Edit missing edge cases, data boundaries, and acceptance criteria.",
+    timing: "Immediately after ideation",
+  },
+  {
+    title: "Approve launch guardrails",
+    whyItMatters: "Guardrails prevent unsafe deploys and preserve auditability.",
+    humanAction: "Choose autonomy level, quality gates, and deployment scope.",
+    timing: "Right before autonomous execution",
+  },
+  {
+    title: "Monitor and intervene",
+    whyItMatters: "Early intervention minimizes incidents and rollback cost.",
+    humanAction: "Track progress, incidents, and manually pause when needed.",
+    timing: "During execution and deployment",
+  },
+] as const;
+
+const DESIGN_GUIDELINES = [
+  "Use progressive disclosure: show only what users need at each step.",
+  "Provide just-in-time explanations near every high-risk decision.",
+  "Use action language (Approve, Launch, Pause) and avoid jargon-only labels.",
+  "Make recommended defaults obvious, but let experts override them.",
+  "Always pair autonomous actions with clear safety and rollback affordances.",
+] as const;
+
 function PreviewCard({ heading, description }: CardData) {
   return (
     <div className="rounded-xl border border-white/10 bg-black/40 p-4 text-sm">
@@ -92,6 +134,25 @@ export default function NewProjectPage() {
         </section>
 
         <section className="rounded-2xl border border-white/10 bg-panel p-6">
+          <h2 className="text-lg font-semibold">Workflow map (human + agent responsibilities)</h2>
+          <p className="mt-2 text-sm text-white/60">
+            This sequence keeps the UI meaningful by showing what the AI does and when a human
+            should step in.
+          </p>
+          <div className="mt-4 grid gap-3">
+            {WORKFLOW_STEPS.map((step, index) => (
+              <div key={step.title} className="rounded-xl border border-white/10 bg-black/40 p-4">
+                <p className="text-xs uppercase tracking-wide text-cyan-200/70">Step {index + 1}</p>
+                <h3 className="mt-1 text-sm font-semibold text-white">{step.title}</h3>
+                <p className="mt-2 text-sm text-white/65">Why this matters: {step.whyItMatters}</p>
+                <p className="mt-1 text-sm text-white/65">Your action: {step.humanAction}</p>
+                <p className="mt-1 text-xs text-white/45">Timing: {step.timing}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-white/10 bg-panel p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold">1. Conversational Ideation</h2>
@@ -126,6 +187,15 @@ export default function NewProjectPage() {
               </Button>
             </div>
           </div>
+        </section>
+
+        <section className="rounded-2xl border border-cyan-300/20 bg-cyan-500/5 p-6">
+          <h3 className="text-sm font-semibold text-cyan-50">Human-centered UI guidelines</h3>
+          <p className="mt-2 text-sm text-white/65">
+            These guidelines are now applied throughout this workflow and can be reused for future
+            UI screens.
+          </p>
+          <BulletList items={DESIGN_GUIDELINES} />
         </section>
 
         <section className="rounded-2xl border border-white/10 bg-panel p-6">
@@ -192,6 +262,9 @@ export default function NewProjectPage() {
               <div key={item.setting} className="rounded-xl border border-white/10 bg-black/40 p-4">
                 <p className="text-sm font-medium text-white">{item.setting}</p>
                 <p className="mt-1 text-sm text-white/65">{item.explanation}</p>
+                <p className="mt-2 text-xs text-cyan-200/75">
+                  Recommended for most teams: Keep default until your first stable release.
+                </p>
               </div>
             ))}
           </div>

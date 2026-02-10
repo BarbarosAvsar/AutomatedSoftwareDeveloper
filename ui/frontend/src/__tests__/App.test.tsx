@@ -20,6 +20,10 @@ describe("AEC routes", () => {
     renderRoute("/requirements");
     expect(screen.getByRole("heading", { name: /Requirements Studio/i })).toBeInTheDocument();
     expect(screen.getByText(/90-second guide/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Workflow map \(human \+ agent responsibilities\)/i })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Human-centered UI guidelines/i)).toBeInTheDocument();
     expect(screen.getByText(/Settings explained \(plain language\)/i)).toBeInTheDocument();
   });
 
