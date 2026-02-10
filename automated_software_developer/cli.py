@@ -281,6 +281,13 @@ def _write_privacy_note(project_dir: Path, policy: TelemetryPolicy) -> None:
     privacy_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+
+
+def _cli_error(code: str, message: str, hint: str | None = None) -> typer.BadParameter:
+    """Create a standardized CLI error with error code and optional remediation hint."""
+    if hint is None:
+        return typer.BadParameter(f"[{code}] {message}")
+    return typer.BadParameter(f"[{code}] {message} Hint: {hint}")
 def _parse_retention_days(raw_value: str) -> int:
     """Parse retention policy strings like '30d' into integer days."""
     cleaned = raw_value.strip().lower()
@@ -323,7 +330,7 @@ def _resolve_verified_grant(
                     "Create one with `autosd preauth create-grant --auto-deploy-prod` "
                     "and pass --preauth-grant <id>."
                 )
-            raise typer.BadParameter(f"Preauthorization is required. {hint}")
+            raise _cli_error("AUTOSD-PREAUTH-REQUIRED", "Preauthorization is required.", hint)
         return None
     verification = verify_grant(
         grant_id=grant_id,
@@ -332,7 +339,11 @@ def _resolve_verified_grant(
         environment=environment,
     )
     if not verification.valid:
-        raise typer.BadParameter(f"Preauthorization verification failed: {verification.reason}")
+        raise _cli_error(
+            "AUTOSD-PREAUTH-INVALID",
+            f"Preauthorization verification failed: {verification.reason}",
+            "Use `autosd preauth list --active-only` to find a valid grant or create a new one.",
+        )
     return verification.grant
 
 
@@ -2262,7 +2273,11 @@ def deploy_project(
     }
     required_capability = capability_by_env.get(env_normalized)
     if required_capability is None:
-        raise typer.BadParameter("env must be one of: dev, staging, prod")
+        raise _cli_error(
+            "AUTOSD-ENV-INVALID",
+            "env must be one of: dev, staging, prod",
+            "Use --env dev|staging|prod.",
+        )
     grant = _resolve_verified_grant(
         grant_id=preauth_grant,
         require_preauth=require_preauth or (env_normalized == "prod"),
@@ -2478,7 +2493,11 @@ def promote_project(
     }
     required_capability = capability_by_env.get(target_env)
     if required_capability is None:
-        raise typer.BadParameter("--to must be one of: dev, staging, prod")
+        raise _cli_error(
+            "AUTOSD-TARGET-ENV-INVALID",
+            "--to must be one of: dev, staging, prod",
+            "Use --to dev|staging|prod.",
+        )
     grant = _resolve_verified_grant(
         grant_id=preauth_grant,
         require_preauth=require_preauth or (target_env == "prod"),
