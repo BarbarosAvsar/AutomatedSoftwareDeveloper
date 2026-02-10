@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from automated_software_developer.agent.security import SecurityError, ensure_safe_relative_path
@@ -58,16 +59,27 @@ class FileWorkspace:
         target.chmod(mode | 0o111)
 
     def list_files(self, max_files: int = 500) -> list[str]:
-        """Return a sorted list of relative paths for non-hidden files."""
+        """Return a deterministic list of relative paths for non-hidden files."""
+        skip_dirs = {
+            ".autosd",
+            ".git",
+            ".venv",
+            "venv",
+            "node_modules",
+            "__pycache__",
+        }
         files: list[str] = []
-        for path in sorted(self.base_dir.rglob("*")):
+        base = self.base_dir
+        for root, dirnames, filenames in os.walk(base):
             if len(files) >= max_files:
                 break
-            if not path.is_file():
-                continue
-            if ".git" in path.parts:
-                continue
-            files.append(str(path.relative_to(self.base_dir)).replace("\\", "/"))
+            dirnames[:] = sorted(name for name in dirnames if name not in skip_dirs)
+            for filename in sorted(filenames):
+                if len(files) >= max_files:
+                    break
+                path = Path(root) / filename
+                relative = path.relative_to(base)
+                files.append(str(relative).replace("\\", "/"))
         return files
 
     def build_context_snapshot(self, max_files: int = 40, max_chars_per_file: int = 3000) -> str:

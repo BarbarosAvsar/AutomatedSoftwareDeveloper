@@ -170,7 +170,7 @@ def load_quality_gate_cache(workspace_dir: Path) -> QualityGateCacheEntry | None
         return None
     try:
         payload = json.loads(cache_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, OSError):
         return None
     if not isinstance(payload, dict):
         return None
