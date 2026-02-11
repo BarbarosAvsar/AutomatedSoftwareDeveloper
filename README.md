@@ -28,6 +28,55 @@ tail -f autosd.log
 The UI is a first-class, chat-first web console that exposes the full autonomous
 workflow. The CLI remains fully supported.
 
+### Windows 11 One-Click UI Setup
+
+Prerequisites:
+
+- Python 3.11+
+- Node.js LTS
+- npm (installed with Node.js)
+
+Install AutoSD for local development:
+
+```bash
+py -3.11 -m pip install -e .[dev]
+```
+
+Start backend + frontend with one command:
+
+```bash
+autosd ui serve
+```
+
+Install desktop launcher shortcuts (per-user, no admin required):
+
+```bash
+autosd ui install-shortcuts
+```
+
+Remove desktop launcher shortcuts:
+
+```bash
+autosd ui remove-shortcuts
+```
+
+Optional global-style install using pipx:
+
+```bash
+py -3.11 -m pip install --user pipx
+py -3.11 -m pipx ensurepath
+pipx install --editable .
+```
+
+Troubleshooting:
+
+- PowerShell execution policy blocks scripts: run with `powershell -ExecutionPolicy Bypass -File scripts/start_ui.ps1`.
+- PATH issues for `autosd` or `npm`: reopen terminal after install and confirm with `where autosd` / `where npm`.
+- Port conflicts: override defaults with `autosd ui serve --backend-port 18080 --frontend-port 5174`.
+- Use `autosd.log` and `--verbose` for richer diagnostics (for example: `autosd --verbose ui serve`).
+
+### Legacy Manual UI Startup (still supported)
+
 Backend API (FastAPI):
 
 ```bash

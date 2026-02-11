@@ -88,6 +88,13 @@ from automated_software_developer.agent.providers.openai_provider import OpenAIP
 from automated_software_developer.agent.telemetry.policy import TelemetryPolicy
 from automated_software_developer.agent.telemetry.store import TelemetryStore
 from automated_software_developer.logging_utils import configure_logging
+from automated_software_developer.ui_cli import (
+    UICommandError,
+    UIServeConfig,
+    install_windows_shortcuts,
+    remove_windows_shortcuts,
+    serve_ui,
+)
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 projects_app = typer.Typer(no_args_is_help=True)
@@ -100,6 +107,7 @@ sprint_app = typer.Typer(no_args_is_help=True)
 plugins_app = typer.Typer(no_args_is_help=True)
 ci_app = typer.Typer(no_args_is_help=True)
 policy_app = typer.Typer(no_args_is_help=True)
+ui_app = typer.Typer(no_args_is_help=True)
 console = Console()
 
 app.add_typer(projects_app, name="projects")
@@ -112,6 +120,7 @@ app.add_typer(sprint_app, name="sprint")
 app.add_typer(plugins_app, name="plugins")
 app.add_typer(ci_app, name="ci")
 app.add_typer(policy_app, name="policy")
+app.add_typer(ui_app, name="ui")
 
 
 def _version_callback(value: bool) -> None:
@@ -2694,6 +2703,89 @@ def disable_plugin(plugin_id: Annotated[str, typer.Argument(..., min=1)]) -> Non
     registry = PluginRegistry()
     plugin = registry.disable_plugin(plugin_id)
     console.print(f"Disabled plugin: {plugin.name}")
+
+
+@ui_app.command("serve")
+def ui_serve(
+    host: Annotated[
+        str,
+        typer.Option(help="Host interface for backend/frontend UI services."),
+    ] = "127.0.0.1",
+    backend_port: Annotated[
+        int,
+        typer.Option(help="Backend API port for FastAPI service."),
+    ] = 8080,
+    frontend_port: Annotated[
+        int,
+        typer.Option(help="Frontend Vite port for the React app."),
+    ] = 5173,
+    open_browser: Annotated[
+        bool,
+        typer.Option(
+            "--open-browser/--no-open-browser",
+            help="Open the frontend URL in the default browser once started.",
+        ),
+    ] = True,
+    reload: Annotated[
+        bool,
+        typer.Option(
+            "--reload/--no-reload",
+            help="Enable uvicorn auto-reload for development workflows.",
+        ),
+    ] = True,
+    install_frontend_deps: Annotated[
+        bool,
+        typer.Option(
+            "--install-frontend-deps/--no-install-frontend-deps",
+            help="Install frontend npm dependencies when ui/frontend/node_modules is missing.",
+        ),
+    ] = False,
+) -> None:
+    """Serve backend and frontend UI services together."""
+    if backend_port < 1 or backend_port > 65535:
+        raise typer.BadParameter("backend-port must be between 1 and 65535.")
+    if frontend_port < 1 or frontend_port > 65535:
+        raise typer.BadParameter("frontend-port must be between 1 and 65535.")
+
+    config = UIServeConfig(
+        host=host,
+        backend_port=backend_port,
+        frontend_port=frontend_port,
+        open_browser=open_browser,
+        reload=reload,
+        install_frontend_deps=install_frontend_deps,
+    )
+    repo_root = Path(__file__).resolve().parent.parent
+    try:
+        serve_ui(config, repo_root=repo_root)
+    except UICommandError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@ui_app.command("install-shortcuts")
+def ui_install_shortcuts() -> None:
+    """Install Windows desktop launch shortcuts for AutoSD UI."""
+    repo_root = Path(__file__).resolve().parent.parent
+    try:
+        installed = install_windows_shortcuts(repo_root=repo_root)
+    except UICommandError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    for path in installed:
+        console.print(f"Installed: {path}")
+
+
+@ui_app.command("remove-shortcuts")
+def ui_remove_shortcuts() -> None:
+    """Remove Windows desktop launch shortcuts for AutoSD UI."""
+    try:
+        removed = remove_windows_shortcuts()
+    except UICommandError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    if not removed:
+        console.print("No AutoSD UI desktop shortcuts were present.")
+        return
+    for path in removed:
+        console.print(f"Removed: {path}")
 
 
 if __name__ == "__main__":
