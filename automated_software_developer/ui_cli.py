@@ -50,14 +50,21 @@ def ensure_python_version() -> None:
         raise UICommandError("autosd ui serve requires Python 3.11+.")
 
 
-def ensure_tooling_available() -> None:
-    """Fail fast when required Node.js/npm tooling is unavailable on PATH."""
-    missing = [name for name in ("node", "npm") if shutil.which(name) is None]
+def ensure_tooling_available() -> tuple[str, str]:
+    """Resolve required Node.js/npm executables, failing with actionable errors when missing."""
+    resolved = {name: shutil.which(name) for name in ("node", "npm")}
+    missing = [name for name, path in resolved.items() if path is None]
     if missing:
         joined = ", ".join(missing)
         raise UICommandError(
             f"Missing required tooling on PATH: {joined}. Install Node.js LTS and npm, then retry."
         )
+
+    node_path = resolved["node"]
+    npm_path = resolved["npm"]
+    if node_path is None or npm_path is None:
+        raise UICommandError("Unable to resolve Node.js/npm tooling paths from PATH.")
+    return node_path, npm_path
 
 
 def ensure_port_available(host: str, port: int) -> None:
@@ -70,7 +77,7 @@ def ensure_port_available(host: str, port: int) -> None:
         raise UICommandError(f"Port {port} on {host} is unavailable: {exc}.") from exc
 
 
-def ensure_frontend_dependencies(frontend_dir: Path, *, install: bool) -> None:
+def ensure_frontend_dependencies(frontend_dir: Path, *, install: bool, npm_path: str) -> None:
     """Ensure frontend dependencies exist or install them when requested."""
     node_modules = frontend_dir / "node_modules"
     if node_modules.exists():
@@ -82,7 +89,7 @@ def ensure_frontend_dependencies(frontend_dir: Path, *, install: bool) -> None:
         )
 
     result = subprocess.run(  # nosec B603
-        ["npm", "install"],
+        [npm_path, "install"],
         cwd=frontend_dir,
         check=False,
         capture_output=True,
@@ -93,7 +100,7 @@ def ensure_frontend_dependencies(frontend_dir: Path, *, install: bool) -> None:
         raise UICommandError(f"Unable to install frontend dependencies: {stderr}")
 
 
-def build_ui_serve_plan(config: UIServeConfig) -> UIServePlan:
+def build_ui_serve_plan(config: UIServeConfig, *, npm_path: str) -> UIServePlan:
     """Build the backend/frontend command plan from validated configuration."""
     backend_command = [
         sys.executable,
@@ -109,7 +116,7 @@ def build_ui_serve_plan(config: UIServeConfig) -> UIServePlan:
         backend_command.append("--reload")
 
     frontend_command = [
-        "npm",
+        npm_path,
         "run",
         "dev",
         "--",
@@ -141,16 +148,20 @@ def stream_subprocess_output(stream: IO[str] | None, *, label: str) -> None:
 def serve_ui(config: UIServeConfig, *, repo_root: Path) -> None:
     """Run backend and frontend development servers with coordinated lifecycle management."""
     ensure_python_version()
-    ensure_tooling_available()
+    _, npm_path = ensure_tooling_available()
     ensure_port_available(config.host, config.backend_port)
     ensure_port_available(config.host, config.frontend_port)
 
     frontend_dir = repo_root / "ui" / "frontend"
     if not frontend_dir.exists():
         raise UICommandError(f"Frontend directory not found at {frontend_dir}.")
-    ensure_frontend_dependencies(frontend_dir, install=config.install_frontend_deps)
+    ensure_frontend_dependencies(
+        frontend_dir,
+        install=config.install_frontend_deps,
+        npm_path=npm_path,
+    )
 
-    plan = build_ui_serve_plan(config)
+    plan = build_ui_serve_plan(config, npm_path=npm_path)
     print("Starting AutoSD UI services...")
     print(f"Frontend: {plan.frontend_url}")
     print(f"Backend : {plan.backend_url}")
