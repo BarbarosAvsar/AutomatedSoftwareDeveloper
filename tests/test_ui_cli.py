@@ -33,10 +33,11 @@ def test_ui_serve_cli_defaults() -> None:
 
 def test_build_ui_serve_plan_defaults() -> None:
     """UI serve plan should include backend/frontend defaults and reload mode."""
-    plan = build_ui_serve_plan(UIServeConfig())
+    plan = build_ui_serve_plan(UIServeConfig(), npm_path="/usr/bin/npm")
     command_head = plan.backend_command[:3]
     assert command_head == ["python", "-m", "uvicorn"] or command_head[1:3] == ["-m", "uvicorn"]
     assert "--reload" in plan.backend_command
+    assert plan.frontend_command[0] == "/usr/bin/npm"
     assert plan.frontend_command[-1] == "5173"
     assert plan.frontend_url == "http://127.0.0.1:5173"
 
@@ -46,7 +47,7 @@ def test_ensure_frontend_dependencies_missing_without_install(tmp_path: Path) ->
     frontend_dir = tmp_path / "frontend"
     frontend_dir.mkdir()
     with pytest.raises(UICommandError):
-        ensure_frontend_dependencies(frontend_dir, install=False)
+        ensure_frontend_dependencies(frontend_dir, install=False, npm_path="/usr/bin/npm")
 
 
 def test_ensure_frontend_dependencies_installs_with_flag(
@@ -75,8 +76,8 @@ def test_ensure_frontend_dependencies_installs_with_flag(
 
     monkeypatch.setattr("automated_software_developer.ui_cli.subprocess.run", fake_run)
 
-    ensure_frontend_dependencies(frontend_dir, install=True)
-    assert calls == [["npm", "install"]]
+    ensure_frontend_dependencies(frontend_dir, install=True, npm_path="/usr/bin/npm")
+    assert calls == [["/usr/bin/npm", "install"]]
 
 
 def test_ensure_port_available_rejects_bound_port() -> None:
