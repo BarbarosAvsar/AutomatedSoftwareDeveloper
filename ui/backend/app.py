@@ -68,9 +68,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="Project not found") from exc
 
     @app.put("/api/projects/{project_id}/requirements", response_model=ProjectResponse)
-    def update_requirements(
-        project_id: str, payload: ProjectUpdateRequirements
-    ) -> ProjectResponse:
+    def update_requirements(project_id: str, payload: ProjectUpdateRequirements) -> ProjectResponse:
         try:
             return state.store.update_requirements(project_id, payload.requirements)
         except KeyError as exc:
@@ -192,9 +190,7 @@ def create_app() -> FastAPI:
             summary=refinement.summary,
         )
 
-    @app.post(
-        "/api/requirements/validate", response_model=RequirementsValidateResponse
-    )
+    @app.post("/api/requirements/validate", response_model=RequirementsValidateResponse)
     def validate_requirements(
         payload: RequirementsValidateRequest,
     ) -> RequirementsValidateResponse:
@@ -208,9 +204,7 @@ def create_app() -> FastAPI:
     def start_session_alias(payload: RequirementsSessionRequest) -> RequirementsResponse:
         return start_requirements_session(payload)
 
-    @app.post(
-        "/api/sessions/{session_id}/messages", response_model=RequirementsResponse
-    )
+    @app.post("/api/sessions/{session_id}/messages", response_model=RequirementsResponse)
     def add_session_message_alias(
         session_id: str, payload: RequirementsMessageRequest
     ) -> RequirementsResponse:

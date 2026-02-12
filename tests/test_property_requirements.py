@@ -18,7 +18,7 @@ def test_requirements_heuristics_handle_weird_inputs() -> None:
         "requirement: \x00\x01\x02",
         "newline\nseparated\nrequirements",
         "Mixed CASE and symbols !@#$%^&*()",
-        "JSON-like {\"key\": \"value\"}",
+        'JSON-like {"key": "value"}',
     ]
     for sample in samples:
         analysis = refiner._analyze(sample)

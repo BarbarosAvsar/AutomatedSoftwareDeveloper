@@ -1,4 +1,4 @@
-﻿"""Local asymmetric key management for preauthorization grants."""
+"""Local asymmetric key management for preauthorization grants."""
 
 from __future__ import annotations
 

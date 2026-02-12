@@ -324,7 +324,7 @@ def install_windows_shortcuts(
         "$shell = New-Object -ComObject WScript.Shell",
         f"$shortcut = $shell.CreateShortcut('{quoted_lnk}')",
         "$shortcut.TargetPath = 'powershell.exe'",
-        f'$shortcut.Arguments = \'-NoProfile -ExecutionPolicy Bypass -File "{quoted_ps1}"\'',
+        f"$shortcut.Arguments = '-NoProfile -ExecutionPolicy Bypass -File \"{quoted_ps1}\"'",
         f"$shortcut.WorkingDirectory = '{quoted_repo}'",
         "$shortcut.Description = 'Launch AutoSD UI'",
     ]

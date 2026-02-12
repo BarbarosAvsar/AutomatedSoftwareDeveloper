@@ -1,4 +1,4 @@
-﻿"""Local telemetry warehouse backed by SQLite."""
+"""Local telemetry warehouse backed by SQLite."""
 
 from __future__ import annotations
 

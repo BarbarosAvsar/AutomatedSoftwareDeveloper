@@ -1,4 +1,4 @@
-﻿"""Telemetry policy definitions with privacy-preserving defaults."""
+"""Telemetry policy definitions with privacy-preserving defaults."""
 
 from __future__ import annotations
 

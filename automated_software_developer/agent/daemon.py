@@ -149,9 +149,7 @@ class CompanyDaemon:
         """Process incident signal file and heal projects."""
         if self.config.incident_signals_path is None:
             raise ValueError("Incident signals path is not configured.")
-        payload = json.loads(
-            self.config.incident_signals_path.read_text(encoding="utf-8")
-        )
+        payload = json.loads(self.config.incident_signals_path.read_text(encoding="utf-8"))
         if not isinstance(payload, list):
             raise ValueError("Incident signals file must contain a JSON list.")
         for signal in payload:

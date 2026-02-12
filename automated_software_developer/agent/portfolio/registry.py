@@ -1,4 +1,4 @@
-﻿"""Persistent multi-project portfolio registry with append-only JSONL storage."""
+"""Persistent multi-project portfolio registry with append-only JSONL storage."""
 
 from __future__ import annotations
 

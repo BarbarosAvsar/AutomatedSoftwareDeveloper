@@ -35,7 +35,7 @@ def build_graph(root: Path) -> dict[str, set[str]]:
                 if node.level == 0 and node.module.startswith(PKG):
                     graph[mod].add(node.module)
                 elif node.level > 0:
-                    prefix = mod.split(".")[:-node.level]
+                    prefix = mod.split(".")[: -node.level]
                     absolute = ".".join(prefix + [node.module]) if node.module else ".".join(prefix)
                     if absolute.startswith(PKG):
                         graph[mod].add(absolute)

@@ -1,4 +1,4 @@
-﻿"""Tests for portfolio registry, schema validation, dashboard API, and CLI commands."""
+"""Tests for portfolio registry, schema validation, dashboard API, and CLI commands."""
 
 from __future__ import annotations
 

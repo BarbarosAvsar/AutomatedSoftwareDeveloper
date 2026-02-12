@@ -228,16 +228,12 @@ class LaunchCoordinator:
     ) -> None:
         autosd_dir = Path.cwd() / ".autosd"
         autosd_dir.mkdir(parents=True, exist_ok=True)
-        (autosd_dir / "refined_requirements.md").write_text(
-            requirements, encoding="utf-8"
-        )
+        (autosd_dir / "refined_requirements.md").write_text(requirements, encoding="utf-8")
         (autosd_dir / "requirements_snapshot.json").write_text(
             _to_json({"project_id": project_id, "requirements": requirements}),
             encoding="utf-8",
         )
-        (autosd_dir / "policy_resolved.json").write_text(
-            _to_json(policy_payload), encoding="utf-8"
-        )
+        (autosd_dir / "policy_resolved.json").write_text(_to_json(policy_payload), encoding="utf-8")
 
 
 def create_default_paths(base_dir: Path) -> dict[str, Path]:

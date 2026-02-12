@@ -127,9 +127,7 @@ class RequirementsRefiner:
                     break
 
         ambiguity_signals = [
-            f"Ambiguous term '{term}' detected."
-            for term in AMBIGUOUS_TERMS
-            if term in lowered
+            f"Ambiguous term '{term}' detected." for term in AMBIGUOUS_TERMS if term in lowered
         ]
         contradiction_signals: list[str] = []
         if "must" in lowered and "must not" in lowered:
@@ -232,9 +230,7 @@ class RequirementsRefiner:
             criteria: list[str]
             if isinstance(criteria_raw, list):
                 criteria = [
-                    self._ensure_given_when_then(str(value))
-                    for value in criteria_raw
-                    if value
+                    self._ensure_given_when_then(str(value)) for value in criteria_raw if value
                 ]
             else:
                 criteria = []

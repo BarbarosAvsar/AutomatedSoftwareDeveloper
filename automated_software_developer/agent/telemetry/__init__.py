@@ -1,4 +1,4 @@
-﻿"""Telemetry policy, events, and store utilities."""
+"""Telemetry policy, events, and store utilities."""
 
 from automated_software_developer.agent.telemetry.events import (
     TELEMETRY_EVENT_SCHEMA,

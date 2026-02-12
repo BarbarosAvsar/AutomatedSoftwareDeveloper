@@ -178,8 +178,7 @@ class PromptPatternStore:
         """Load latest templates for all template ids."""
         self.ensure_defaults()
         return {
-            template_id: self.load_latest(template_id)
-            for template_id in self.list_template_ids()
+            template_id: self.load_latest(template_id) for template_id in self.list_template_ids()
         }
 
     def save_new_version(

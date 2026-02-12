@@ -1,4 +1,4 @@
-﻿"""Platform adapter interfaces and capability graph helpers."""
+"""Platform adapter interfaces and capability graph helpers."""
 
 from __future__ import annotations
 

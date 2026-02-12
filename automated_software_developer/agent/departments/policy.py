@@ -10,14 +10,16 @@ from dataclasses import dataclass, field
 class DepartmentPolicy:
     """Policy knobs governing department autonomy and budgets."""
 
-    daemon_enabled_departments: set[str] = field(default_factory=lambda: {
-        "program_management",
-        "engineering",
-        "security",
-        "operations",
-        "data_intelligence",
-        "support_ops",
-    })
+    daemon_enabled_departments: set[str] = field(
+        default_factory=lambda: {
+            "program_management",
+            "engineering",
+            "security",
+            "operations",
+            "data_intelligence",
+            "support_ops",
+        }
+    )
     actions_requiring_preauth: set[str] = field(
         default_factory=lambda: {"deploy_prod", "auto_merge", "publish_app_store"}
     )

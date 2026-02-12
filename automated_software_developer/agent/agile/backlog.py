@@ -238,11 +238,7 @@ def _priority_score(
     )
     dependency_penalty = len(story.dependencies) * 0.5
     return (
-        (value_score * 3)
-        + (risk_score * 2)
-        + incident_boost
-        + telemetry_boost
-        - dependency_penalty
+        (value_score * 3) + (risk_score * 2) + incident_boost + telemetry_boost - dependency_penalty
     )
 
 

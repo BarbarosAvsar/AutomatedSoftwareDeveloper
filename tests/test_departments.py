@@ -136,8 +136,7 @@ def test_ops_release_creates_bundle_and_tag(tmp_path: Path) -> None:
 
 def test_engineering_agent_creates_architecture_and_gates(tmp_path: Path) -> None:
     verify = (
-        "python -c \"from pathlib import Path; assert 'ok' in "
-        "Path('artifact.txt').read_text()\""
+        "python -c \"from pathlib import Path; assert 'ok' in Path('artifact.txt').read_text()\""
     )
     responses = [
         {

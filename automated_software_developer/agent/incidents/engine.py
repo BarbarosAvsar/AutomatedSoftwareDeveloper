@@ -1,4 +1,4 @@
-﻿"""Incident detection and autonomous self-healing engine."""
+"""Incident detection and autonomous self-healing engine."""
 
 from __future__ import annotations
 

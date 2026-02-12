@@ -1,4 +1,4 @@
-﻿"""Packaging/build planning and optional execution stage."""
+"""Packaging/build planning and optional execution stage."""
 
 from __future__ import annotations
 

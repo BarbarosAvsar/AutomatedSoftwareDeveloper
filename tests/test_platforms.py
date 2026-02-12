@@ -1,4 +1,4 @@
-﻿"""Tests for platform adapter catalog and selection behavior."""
+"""Tests for platform adapter catalog and selection behavior."""
 
 from __future__ import annotations
 

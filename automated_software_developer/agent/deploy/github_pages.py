@@ -1,4 +1,4 @@
-﻿"""GitHub Pages deployment target plugin."""
+"""GitHub Pages deployment target plugin."""
 
 from __future__ import annotations
 
@@ -10,7 +10,8 @@ from automated_software_developer.agent.deploy.base import (
     utc_now,
 )
 
-PAGES_WORKFLOW = """
+PAGES_WORKFLOW = (
+    """
 name: Deploy Pages
 
 on:
@@ -33,7 +34,9 @@ jobs:
         with:
           path: .
       - uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e
-""".strip() + "\n"
+""".strip()
+    + "\n"
+)
 
 
 class GitHubPagesDeploymentTarget(DeploymentTarget):

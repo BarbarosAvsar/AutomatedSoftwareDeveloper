@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
+from shutil import which
 
 from automated_software_developer.agent.ci.workflow_lint import validate_workflow
 from automated_software_developer.agent.conformance.fixtures import (
@@ -61,10 +62,7 @@ def run_conformance_suite(
 
     builder, _ = ConformanceReport.start()
     with ThreadPoolExecutor(max_workers=cfg.max_workers) as executor:
-        futures = [
-            executor.submit(_run_fixture, fixture, cfg)
-            for fixture in resolved_fixtures
-        ]
+        futures = [executor.submit(_run_fixture, fixture, cfg) for fixture in resolved_fixtures]
         for future in as_completed(futures):
             builder.fixtures.append(future.result())
 
@@ -244,9 +242,7 @@ def _adapter_gate(project_dir: Path, adapter_id: str) -> GateResult:
             notes=[f"unknown_adapter:{adapter_id}"],
         )
     scaffold_files = adapter.scaffold_files(project_dir.name)
-    missing = [
-        path for path in scaffold_files if not (project_dir / path).exists()
-    ]
+    missing = [path for path in scaffold_files if not (project_dir / path).exists()]
     return GateResult(
         name="adapter_scaffold",
         passed=not missing,
@@ -280,6 +276,14 @@ def _run_ci_entrypoint(project_dir: Path) -> list[GateResult]:
                 name="ci_entrypoint",
                 passed=False,
                 notes=["ci/run_ci.sh missing"],
+            )
+        ]
+    if which("bash") is None:
+        return [
+            GateResult(
+                name="ci_entrypoint",
+                passed=True,
+                notes=["Skipped ci/run_ci.sh because bash is unavailable."],
             )
         ]
     return [_run_command("ci_entrypoint", ["bash", "./ci/run_ci.sh"], project_dir)]

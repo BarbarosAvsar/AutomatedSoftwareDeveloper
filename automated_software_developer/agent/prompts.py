@@ -244,10 +244,7 @@ def _render_template_guidance(template: PromptTemplate) -> str:
 
 def build_requirements_refinement_system_prompt(template: PromptTemplate) -> str:
     """Build system prompt for requirements refinement."""
-    return (
-        f"{REQUIREMENTS_REFINEMENT_BASE_SYSTEM_PROMPT}\n\n"
-        f"{_render_template_guidance(template)}"
-    )
+    return f"{REQUIREMENTS_REFINEMENT_BASE_SYSTEM_PROMPT}\n\n{_render_template_guidance(template)}"
 
 
 def build_requirements_refinement_user_prompt(
@@ -270,10 +267,7 @@ def build_requirements_refinement_user_prompt(
 
 def build_story_implementation_system_prompt(template: PromptTemplate) -> str:
     """Build system prompt for story-by-story coding loop."""
-    return (
-        f"{STORY_IMPLEMENTATION_BASE_SYSTEM_PROMPT}\n\n"
-        f"{_render_template_guidance(template)}"
-    )
+    return f"{STORY_IMPLEMENTATION_BASE_SYSTEM_PROMPT}\n\n{_render_template_guidance(template)}"
 
 
 def build_story_implementation_user_prompt(

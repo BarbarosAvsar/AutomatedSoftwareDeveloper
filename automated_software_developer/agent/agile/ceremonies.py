@@ -93,9 +93,7 @@ def run_sprint_review(
         if story.story_id in story_ids
     ]
     if not dod_result.passed:
-        acceptance_checks.append(
-            f"DoD incomplete: missing {', '.join(dod_result.missing_items)}"
-        )
+        acceptance_checks.append(f"DoD incomplete: missing {', '.join(dod_result.missing_items)}")
     return SprintReviewSummary(
         sprint_id=sprint.sprint_id,
         completed_story_ids=completed_story_ids,

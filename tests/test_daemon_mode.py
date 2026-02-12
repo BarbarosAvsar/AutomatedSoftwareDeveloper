@@ -11,7 +11,7 @@ from automated_software_developer.agent.providers.mock_provider import MockProvi
 
 def _mock_responses() -> list[dict[str, object]]:
     verify = (
-        "python -c \"from pathlib import Path; "
+        'python -c "from pathlib import Path; '
         "assert Path('artifact.txt').read_text(encoding='utf-8').strip() == 'ok'\""
     )
     return [

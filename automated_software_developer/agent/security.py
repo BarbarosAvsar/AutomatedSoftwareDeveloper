@@ -58,9 +58,7 @@ _SENSITIVE_QUERY_PARAM_PATTERN: Final[re.Pattern[str]] = re.compile(
 _BASIC_AUTH_HEADER_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"(?i)(authorization\s*:\s*basic\s+)[A-Za-z0-9+/=]+"
 )
-_X_API_KEY_HEADER_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"(?i)(x-api-key\s*:\s*)[^\s]+"
-)
+_X_API_KEY_HEADER_PATTERN: Final[re.Pattern[str]] = re.compile(r"(?i)(x-api-key\s*:\s*)[^\s]+")
 
 
 def ensure_safe_relative_path(base_dir: Path, relative_path: str) -> Path:

@@ -1,4 +1,4 @@
-﻿"""Preauthorization grant model, signing, persistence, and revocation."""
+"""Preauthorization grant model, signing, persistence, and revocation."""
 
 from __future__ import annotations
 

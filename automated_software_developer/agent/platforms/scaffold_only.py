@@ -1,4 +1,4 @@
-﻿"""Scaffold-only platform adapters for desktop and mobile targets."""
+"""Scaffold-only platform adapters for desktop and mobile targets."""
 
 from __future__ import annotations
 

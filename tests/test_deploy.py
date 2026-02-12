@@ -1,4 +1,4 @@
-﻿"""Tests for deployment target orchestrator and CLI wiring."""
+"""Tests for deployment target orchestrator and CLI wiring."""
 
 from __future__ import annotations
 

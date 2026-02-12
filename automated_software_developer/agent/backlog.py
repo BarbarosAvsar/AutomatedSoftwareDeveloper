@@ -152,15 +152,14 @@ def derive_verification_commands_from_criteria(criteria: list[str]) -> list[str]
     exists_paths, contains_checks = parse_acceptance_criteria_assertions(criteria)
     for path in exists_paths:
         commands.append(
-            "python -c "
-            f"\"from pathlib import Path; assert Path({json.dumps(path)}).exists()\""
+            f'python -c "from pathlib import Path; assert Path({json.dumps(path)}).exists()"'
         )
     for path, expected in contains_checks:
         expected_literal = json.dumps(expected)
         path_literal = json.dumps(path)
         commands.append(
             "python -c "
-            "\"from pathlib import Path; "
+            '"from pathlib import Path; '
             f"assert {expected_literal} in "
             f"Path({path_literal}).read_text(encoding='utf-8')\""
         )

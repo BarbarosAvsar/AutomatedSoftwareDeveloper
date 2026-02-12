@@ -1,4 +1,4 @@
-﻿"""Tests for preauthorization grants, policy resolution, and audit logging."""
+"""Tests for preauthorization grants, policy resolution, and audit logging."""
 
 from __future__ import annotations
 
