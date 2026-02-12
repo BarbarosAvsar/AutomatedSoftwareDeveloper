@@ -1,0 +1,6 @@
+exclude_dirs:
+  - tests
+skips:
+  - B101
+severity: medium
+confidence: medium
