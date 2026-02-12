@@ -173,9 +173,7 @@ class RequirementsAssistant:
         suggestions.append("Lock requirements before launch for auditability.")
         return tuple(suggestions)
 
-    def _build_draft(
-        self, idea: str, turns: list[ConversationTurn]
-    ) -> RequirementsDraft:
+    def _build_draft(self, idea: str, turns: list[ConversationTurn]) -> RequirementsDraft:
         context = "\n".join(turn.content for turn in turns)
         goals = self._extract_goals(context)
         constraints = self._extract_constraints(context)

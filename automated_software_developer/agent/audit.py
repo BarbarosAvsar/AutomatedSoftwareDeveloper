@@ -1,4 +1,4 @@
-﻿"""Audit logging for privileged autonomous actions."""
+"""Audit logging for privileged autonomous actions."""
 
 from __future__ import annotations
 

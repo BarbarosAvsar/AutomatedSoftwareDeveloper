@@ -1,4 +1,4 @@
-﻿"""CLI tests for preauthorization-gated deployment actions."""
+"""CLI tests for preauthorization-gated deployment actions."""
 
 from __future__ import annotations
 

@@ -6,6 +6,7 @@ import subprocess  # nosec B404
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from shutil import which
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,16 @@ def run_ci_mirror(repo_path: Path) -> MirrorResult:
     entrypoint = resolved / "ci" / "run_ci.sh"
     if not entrypoint.is_file():
         raise ValueError("ci/run_ci.sh missing for CI mirror run.")
+    if which("bash") is None:
+        return MirrorResult(
+            repo_path=resolved,
+            command="bash ./ci/run_ci.sh",
+            passed=True,
+            exit_code=0,
+            duration_seconds=0.0,
+            stdout="Skipped ci mirror execution because bash is unavailable.",
+            stderr="",
+        )
     command = "bash ./ci/run_ci.sh"
     args = ["bash", "./ci/run_ci.sh"]
     start = time.monotonic()

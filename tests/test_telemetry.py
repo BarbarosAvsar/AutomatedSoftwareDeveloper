@@ -1,4 +1,4 @@
-﻿"""Tests for privacy-safe telemetry validation, storage, and CLI commands."""
+"""Tests for privacy-safe telemetry validation, storage, and CLI commands."""
 
 from __future__ import annotations
 

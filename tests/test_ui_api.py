@@ -12,9 +12,7 @@ def test_project_creation_and_plan_flow() -> None:
     project = create_response.json()
     project_id = project["id"]
 
-    session_response = client.post(
-        "/api/requirements/sessions", json={"idea": "AI console"}
-    )
+    session_response = client.post("/api/requirements/sessions", json={"idea": "AI console"})
     assert session_response.status_code == 200
     session_id = session_response.json()["session_id"]
 

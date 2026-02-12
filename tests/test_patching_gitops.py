@@ -1,4 +1,4 @@
-﻿"""Tests for GitOps helpers and patch engine orchestration."""
+"""Tests for GitOps helpers and patch engine orchestration."""
 
 from __future__ import annotations
 

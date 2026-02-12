@@ -18,7 +18,9 @@ def _build_pdf(text: str) -> bytes:
     )
     content = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode("latin-1")
     objects.append(
-        b"<< /Length " + str(len(content)).encode("ascii") + b" >>\nstream\n"
+        b"<< /Length "
+        + str(len(content)).encode("ascii")
+        + b" >>\nstream\n"
         + content
         + b"\nendstream"
     )

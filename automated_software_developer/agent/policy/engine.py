@@ -1,4 +1,4 @@
-﻿"""Policy-as-code resolution and action gating helpers."""
+"""Policy-as-code resolution and action gating helpers."""
 
 from __future__ import annotations
 

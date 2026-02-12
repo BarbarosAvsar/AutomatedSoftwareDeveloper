@@ -73,8 +73,7 @@ class GitHubProjectSync:
             self._log_action(action, payload)
             return {"status": "dry_run", "action": action, "payload": payload}
         url = (
-            f"{self.config.api_url}/repos/{self.config.repo}/projects/"
-            f"{self.config.project_number}"
+            f"{self.config.api_url}/repos/{self.config.repo}/projects/{self.config.project_number}"
         )
         headers = {"Authorization": f"Bearer {self.config.token}"}
         response = self.client.post(url, headers=headers, json={"action": action, **payload})

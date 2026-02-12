@@ -1,4 +1,4 @@
-﻿"""Deterministic GitOps helpers for local commit/push/tag automation."""
+"""Deterministic GitOps helpers for local commit/push/tag automation."""
 
 from __future__ import annotations
 

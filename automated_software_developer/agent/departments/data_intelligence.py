@@ -55,9 +55,7 @@ class DataIntelligenceAgent:
         analytics_dir.mkdir(parents=True, exist_ok=True)
 
         blocked = [
-            entry
-            for entry in entries
-            if entry.license not in self.policy.allowed_corpus_licenses
+            entry for entry in entries if entry.license not in self.policy.allowed_corpus_licenses
         ]
         if blocked:
             reasons = ",".join(sorted({entry.license for entry in blocked}))

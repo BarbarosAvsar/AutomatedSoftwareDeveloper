@@ -1,4 +1,4 @@
-﻿"""Docker deployment target plugin."""
+"""Docker deployment target plugin."""
 
 from __future__ import annotations
 

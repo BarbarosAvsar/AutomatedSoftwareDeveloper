@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
+
+
+def _home_dir() -> Path:
+    """Resolve user home directory with HOME taking precedence for tests."""
+    home_env = os.environ.get("HOME")
+    if home_env:
+        return Path(home_env).expanduser()
+    return Path.home()
 
 
 @dataclass(frozen=True)
@@ -18,7 +27,7 @@ class PluginDescriptor:
 def discover_plugin_paths() -> list[Path]:
     """Return search paths for plugins."""
     paths = [
-        Path.home() / ".autosd" / "plugins",
+        _home_dir() / ".autosd" / "plugins",
         Path.cwd() / "plugins",
         Path.cwd() / "skills",
     ]

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from automated_software_developer.agent.filesystem import FileWorkspace
 
-DEFAULT_GITIGNORE = """
+DEFAULT_GITIGNORE = (
+    """
 # Python cache/artifacts
 __pycache__/
 *.py[cod]
@@ -25,9 +26,12 @@ env/
 Thumbs.db
 .idea/
 .vscode/
-""".strip() + "\n"
+""".strip()
+    + "\n"
+)
 
-DEFAULT_CI_ENTRYPOINT = """#!/usr/bin/env bash
+DEFAULT_CI_ENTRYPOINT = (
+    """#!/usr/bin/env bash
 set -euo pipefail
 
 python -m pip install --upgrade pip
@@ -101,9 +105,12 @@ then
 else
   echo "build module not available; skipping package build"
 fi
-""".strip() + "\n"
+""".strip()
+    + "\n"
+)
 
-DEFAULT_PYTHON_CI_WORKFLOW = """
+DEFAULT_PYTHON_CI_WORKFLOW = (
+    """
 name: CI
 
 on:
@@ -136,7 +143,9 @@ jobs:
           python -m pip -V
       - name: Run CI entrypoint
         run: ./ci/run_ci.sh
-""".strip() + "\n"
+""".strip()
+    + "\n"
+)
 
 
 def ensure_repository_scaffold(workspace: FileWorkspace) -> None:

@@ -1,4 +1,4 @@
-﻿"""Multi-project patch orchestration with bounded local GitOps workflow."""
+"""Multi-project patch orchestration with bounded local GitOps workflow."""
 
 from __future__ import annotations
 

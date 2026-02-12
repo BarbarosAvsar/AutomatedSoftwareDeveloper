@@ -1,4 +1,4 @@
-﻿"""Tests for incidents ledger and autonomous healing workflow."""
+"""Tests for incidents ledger and autonomous healing workflow."""
 
 from __future__ import annotations
 

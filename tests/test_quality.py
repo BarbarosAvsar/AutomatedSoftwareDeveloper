@@ -47,10 +47,7 @@ def test_quality_static_detects_missing_docstrings_and_syntax_error(tmp_path: Pa
 
 def test_quality_static_passes_when_docstrings_present(tmp_path: Path) -> None:
     (tmp_path / "good.py").write_text(
-        '"""Module docs."""\n\n'
-        "def main() -> int:\n"
-        '    """Return status code."""\n'
-        "    return 0\n",
+        '"""Module docs."""\n\ndef main() -> int:\n    """Return status code."""\n    return 0\n',
         encoding="utf-8",
     )
     result = evaluate_python_quality(tmp_path, enforce_docstrings=True)

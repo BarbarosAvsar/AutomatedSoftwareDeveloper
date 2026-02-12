@@ -1,4 +1,4 @@
-﻿"""Incident schema and persistence helpers for autonomous healing."""
+"""Incident schema and persistence helpers for autonomous healing."""
 
 from __future__ import annotations
 

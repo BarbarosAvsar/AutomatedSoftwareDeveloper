@@ -1,4 +1,4 @@
-﻿"""Deployment target abstractions and orchestrator."""
+"""Deployment target abstractions and orchestrator."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-﻿"""Schema-first models and validation for portfolio registry entries."""
+"""Schema-first models and validation for portfolio registry entries."""
 
 from __future__ import annotations
 

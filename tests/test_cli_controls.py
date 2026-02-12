@@ -1,4 +1,4 @@
-﻿"""CLI tests for halt/resume controls and preauth management commands."""
+"""CLI tests for halt/resume controls and preauth management commands."""
 
 from __future__ import annotations
 

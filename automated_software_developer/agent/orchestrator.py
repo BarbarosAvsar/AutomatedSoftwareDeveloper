@@ -93,7 +93,8 @@ from automated_software_developer.agent.security import (
     scan_workspace_for_secrets,
 )
 
-DEFAULT_AGENTS_MD = """
+DEFAULT_AGENTS_MD = (
+    """
 # AGENTS.md
 
 ## Project Rules
@@ -102,7 +103,9 @@ DEFAULT_AGENTS_MD = """
 - Keep code modular, typed/documented, and security-focused.
 - Update README when functionality changes.
 - Never store secrets in `.autosd` artifacts (progress, backlog, sprint log, journals).
-""".strip() + "\n"
+""".strip()
+    + "\n"
+)
 
 logger = logging.getLogger(__name__)
 
@@ -239,9 +242,7 @@ class SoftwareDevelopmentAgent:
         sprint_dir = output_dir / ".autosd" / "sprints" / sprint_plan.sprint_id
         sprint_dir.mkdir(parents=True, exist_ok=True)
         sprint_plan_path = sprint_dir / "sprint_plan.json"
-        sprint_plan_path.write_text(
-            json.dumps(sprint_plan.to_dict(), indent=2), encoding="utf-8"
-        )
+        sprint_plan_path.write_text(json.dumps(sprint_plan.to_dict(), indent=2), encoding="utf-8")
 
         retrospective_md = run_retrospective(sprint_plan, metrics_store)
         retrospective_path = write_retrospective(
@@ -734,14 +735,12 @@ class SoftwareDevelopmentAgent:
                 failing_checks = error_text or self._format_command_results(last_results)
                 if not criteria_ok:
                     failing_checks = (
-                        (failing_checks + "\n" if failing_checks else "")
-                        + "Executable acceptance criteria checks failed."
-                    )
+                        failing_checks + "\n" if failing_checks else ""
+                    ) + "Executable acceptance criteria checks failed."
                 if quality_result_text is not None:
                     failing_checks = (
-                        (failing_checks + "\n" if failing_checks else "")
-                        + quality_result_text
-                    )
+                        failing_checks + "\n" if failing_checks else ""
+                    ) + quality_result_text
                 feedback = failing_checks
 
             journal.append(

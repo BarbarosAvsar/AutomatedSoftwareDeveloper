@@ -1,4 +1,4 @@
-﻿"""Generic container CI deployment target plugin."""
+"""Generic container CI deployment target plugin."""
 
 from __future__ import annotations
 
@@ -10,7 +10,8 @@ from automated_software_developer.agent.deploy.base import (
     utc_now,
 )
 
-GENERIC_CONTAINER_WORKFLOW = """
+GENERIC_CONTAINER_WORKFLOW = (
+    """
 name: Container Build
 
 on:
@@ -30,7 +31,9 @@ jobs:
           else
             echo "No Dockerfile; skipping build"
           fi
-""".strip() + "\n"
+""".strip()
+    + "\n"
+)
 
 
 class GenericContainerDeploymentTarget(DeploymentTarget):

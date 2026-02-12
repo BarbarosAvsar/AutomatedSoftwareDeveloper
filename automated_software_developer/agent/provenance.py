@@ -1,4 +1,4 @@
-﻿"""Build provenance and reproducibility artifact helpers."""
+"""Build provenance and reproducibility artifact helpers."""
 
 from __future__ import annotations
 

@@ -91,8 +91,7 @@ def build_quality_gate_plan(
     format_commands: list[str] = []
     verification_commands: list[str] = [_readme_exists_command()]
     has_python_files = any(
-        path.suffix == ".py" and ".autosd" not in path.parts
-        for path in workspace_dir.rglob("*.py")
+        path.suffix == ".py" and ".autosd" not in path.parts for path in workspace_dir.rglob("*.py")
     )
     if not has_python_files:
         return QualityGatePlan(
@@ -141,9 +140,7 @@ def evaluate_python_quality(
     """Run static Python-specific checks for syntax and docstring coverage."""
     syntax_errors: list[str] = []
     docstring_violations: list[str] = []
-    python_files = [
-        path for path in workspace_dir.rglob("*.py") if ".autosd" not in path.parts
-    ]
+    python_files = [path for path in workspace_dir.rglob("*.py") if ".autosd" not in path.parts]
     for path in python_files:
         try:
             content = path.read_text(encoding="utf-8")

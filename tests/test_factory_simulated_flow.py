@@ -1,4 +1,4 @@
-﻿"""End-to-end simulated local factory flow using mock provider and local services."""
+"""End-to-end simulated local factory flow using mock provider and local services."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from automated_software_developer.cli import app
 
 def _mock_responses() -> list[dict[str, object]]:
     verify = (
-        "python -c \"from pathlib import Path; "
+        'python -c "from pathlib import Path; '
         "assert Path('artifact.txt').read_text(encoding='utf-8').strip() == 'ok'\""
     )
     return [
@@ -64,8 +64,7 @@ def _mock_responses() -> list[dict[str, object]]:
                 {
                     "assumption": "artifact value is ok",
                     "testable_criterion": (
-                        "Given checks run, when artifact is read, "
-                        "then value equals ok"
+                        "Given checks run, when artifact is read, then value equals ok"
                     ),
                 }
             ],

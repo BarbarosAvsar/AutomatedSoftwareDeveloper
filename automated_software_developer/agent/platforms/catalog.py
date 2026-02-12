@@ -1,4 +1,4 @@
-﻿"""Platform adapter catalog and selection helpers."""
+"""Platform adapter catalog and selection helpers."""
 
 from __future__ import annotations
 

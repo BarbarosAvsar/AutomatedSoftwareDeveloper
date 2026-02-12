@@ -1,4 +1,4 @@
-﻿"""Tests for schema-first validators and schema exports."""
+"""Tests for schema-first validators and schema exports."""
 
 from __future__ import annotations
 

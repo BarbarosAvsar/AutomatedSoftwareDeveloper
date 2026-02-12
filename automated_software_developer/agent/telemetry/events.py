@@ -1,4 +1,4 @@
-﻿"""Telemetry event schema validation and JSONL persistence."""
+"""Telemetry event schema validation and JSONL persistence."""
 
 from __future__ import annotations
 

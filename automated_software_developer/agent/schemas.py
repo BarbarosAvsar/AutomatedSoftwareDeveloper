@@ -1,4 +1,4 @@
-﻿"""Schema-first artifact definitions and lightweight validators."""
+"""Schema-first artifact definitions and lightweight validators."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-﻿"""Platform adapter package."""
+"""Platform adapter package."""
 
 from automated_software_developer.agent.platforms.catalog import (
     adapter_catalog,

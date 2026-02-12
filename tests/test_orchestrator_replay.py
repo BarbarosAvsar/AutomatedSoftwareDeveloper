@@ -15,7 +15,7 @@ def _hash_file(path: Path) -> str:
 
 def _verification_command() -> str:
     return (
-        "python -c \"from pathlib import Path; "
+        'python -c "from pathlib import Path; '
         "assert Path('artifact.txt').read_text(encoding='utf-8').strip() == 'ok'\""
     )
 
@@ -98,7 +98,7 @@ def _provider() -> MockProvider:
                         "op": "write_file",
                         "path": "requirements.txt",
                         "content": "typer==0.21.1\n",
-                    }
+                    },
                 ],
                 "verification_commands": [],
             },
@@ -119,7 +119,7 @@ def _provider() -> MockProvider:
                         "op": "write_file",
                         "path": "requirements.txt",
                         "content": "typer==0.21.1\n",
-                    }
+                    },
                 ],
                 "verification_commands": [],
             },
@@ -140,7 +140,7 @@ def _provider() -> MockProvider:
                         "op": "write_file",
                         "path": "requirements.txt",
                         "content": "typer==0.21.1\n",
-                    }
+                    },
                 ],
                 "verification_commands": [],
             },
@@ -161,7 +161,7 @@ def _provider() -> MockProvider:
                         "op": "write_file",
                         "path": "requirements.txt",
                         "content": "typer==0.21.1\n",
-                    }
+                    },
                 ],
                 "verification_commands": [],
             },

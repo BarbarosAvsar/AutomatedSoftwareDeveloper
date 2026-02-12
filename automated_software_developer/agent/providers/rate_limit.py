@@ -38,9 +38,7 @@ class RateLimitBackoff:
         if self.min_delay_seconds <= 0:
             raise ValueError("min_delay_seconds must be greater than zero")
         if self.max_delay_seconds < self.min_delay_seconds:
-            raise ValueError(
-                "max_delay_seconds must be greater than or equal to min_delay_seconds"
-            )
+            raise ValueError("max_delay_seconds must be greater than or equal to min_delay_seconds")
         if not 0 <= self.jitter_ratio <= 1:
             raise ValueError("jitter_ratio must be between 0 and 1 inclusive")
 

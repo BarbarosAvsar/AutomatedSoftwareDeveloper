@@ -1,4 +1,4 @@
-﻿"""Verification helpers for signed preauthorization grants."""
+"""Verification helpers for signed preauthorization grants."""
 
 from __future__ import annotations
 

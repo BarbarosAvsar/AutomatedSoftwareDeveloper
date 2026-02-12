@@ -290,13 +290,13 @@ def _write_privacy_note(project_dir: Path, policy: TelemetryPolicy) -> None:
     privacy_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-
-
 def _cli_error(code: str, message: str, hint: str | None = None) -> typer.BadParameter:
     """Create a standardized CLI error with error code and optional remediation hint."""
     if hint is None:
         return typer.BadParameter(f"[{code}] {message}")
     return typer.BadParameter(f"[{code}] {message} Hint: {hint}")
+
+
 def _parse_retention_days(raw_value: str) -> int:
     """Parse retention policy strings like '30d' into integer days."""
     cleaned = raw_value.strip().lower()
@@ -330,8 +330,7 @@ def _resolve_verified_grant(
     if grant_id is None:
         if require_preauth:
             hint = (
-                "Create a grant with `autosd preauth create-grant` and pass "
-                "--preauth-grant <id>."
+                "Create a grant with `autosd preauth create-grant` and pass --preauth-grant <id>."
             )
             if required_capability == "auto_deploy_prod":
                 hint = (
@@ -1073,13 +1072,9 @@ def sprint_review(
     tests_passed: Annotated[bool, typer.Option(help="Tests passed.")] = True,
     lint_passed: Annotated[bool, typer.Option(help="Lint checks passed.")] = True,
     type_check_passed: Annotated[bool, typer.Option(help="Type checks passed.")] = True,
-    security_scan_passed: Annotated[
-        bool, typer.Option(help="Security scan passed.")
-    ] = True,
+    security_scan_passed: Annotated[bool, typer.Option(help="Security scan passed.")] = True,
     docs_updated: Annotated[bool, typer.Option(help="Documentation updated.")] = True,
-    deployment_successful: Annotated[
-        bool, typer.Option(help="Deployment successful.")
-    ] = True,
+    deployment_successful: Annotated[bool, typer.Option(help="Deployment successful.")] = True,
 ) -> None:
     """Run a sprint review and DoD evaluation."""
     backlog = AgileBacklog.from_dict(json.loads(backlog_path.read_text(encoding="utf-8")))
@@ -2091,9 +2086,7 @@ def patch_project(
         gates_run=["quality_gates", "version_bump"],
         commit_ref=outcome.commit_sha,
         tag_ref=(
-            f"v{outcome.new_version}"
-            if outcome.new_version is not None and create_tag
-            else None
+            f"v{outcome.new_version}" if outcome.new_version is not None and create_tag else None
         ),
         break_glass_used=grant_break_glass(grant),
         details={"reason": reason, "branch": outcome.branch},

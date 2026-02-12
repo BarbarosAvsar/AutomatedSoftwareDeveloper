@@ -1,4 +1,4 @@
-﻿"""Preauthorization key/grant verification exports."""
+"""Preauthorization key/grant verification exports."""
 
 from automated_software_developer.agent.preauth.grants import (
     PreauthGrant,

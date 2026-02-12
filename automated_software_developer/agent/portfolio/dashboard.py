@@ -1,4 +1,4 @@
-﻿"""Read-only local dashboard API exposing portfolio registry state."""
+"""Read-only local dashboard API exposing portfolio registry state."""
 
 from __future__ import annotations
 
@@ -42,8 +42,7 @@ def resolve_dashboard_request(registry: PortfolioRegistry, path: str) -> tuple[i
         return 200, {"status": "ok"}
     if parsed.path == "/projects":
         projects = [
-            serialize_entry(entry)
-            for entry in registry.list_entries(include_archived=True)
+            serialize_entry(entry) for entry in registry.list_entries(include_archived=True)
         ]
         return 200, {"projects": projects, "count": len(projects)}
     if parsed.path == "/oversight":

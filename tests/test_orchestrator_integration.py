@@ -13,7 +13,7 @@ from automated_software_developer.agent.providers.mock_provider import MockProvi
 
 def _verification_command() -> str:
     return (
-        "python -c \"from pathlib import Path; "
+        'python -c "from pathlib import Path; '
         "assert Path('artifact.txt').read_text(encoding='utf-8').strip() == 'ok'\""
     )
 
@@ -28,8 +28,7 @@ def _refinement_payload() -> dict[str, object]:
                 "id": "story-artifact",
                 "title": "Create artifact file",
                 "story": (
-                    "As a developer, I want artifact output "
-                    "so that checks can validate behavior."
+                    "As a developer, I want artifact output so that checks can validate behavior."
                 ),
                 "acceptance_criteria": [
                     "Given output generation, when run completes, then artifact.txt contains ok"
@@ -166,9 +165,7 @@ def test_orchestrator_story_retry_and_artifacts(tmp_path: Path) -> None:
     assert isinstance(progress["platform_adapter_id"], str)
 
     journal_lines = (
-        (tmp_path / ".autosd" / "prompt_journal.jsonl")
-        .read_text(encoding="utf-8")
-        .splitlines()
+        (tmp_path / ".autosd" / "prompt_journal.jsonl").read_text(encoding="utf-8").splitlines()
     )
     assert len(journal_lines) == 3
     outcomes = [json.loads(line).get("outcome") for line in journal_lines]
