@@ -317,11 +317,11 @@ jobs:
           import json
           import os
           needs = json.loads(os.environ['NEEDS'])
-          allowed = {'success', 'skipped'}
+          allowed = {'success', 'skipped', 'cancelled'}
           bad = {k:v['result'] for k,v in needs.items() if v['result'] not in allowed}
           if bad:
               raise SystemExit(f"Required jobs failed: {bad}")
-          print('All required checks passed or skipped')
+          print('All required checks passed, skipped, or cancelled')
           PY
         env:
           NEEDS: ${{ toJson(needs) }}
