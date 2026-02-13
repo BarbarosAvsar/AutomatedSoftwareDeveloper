@@ -70,6 +70,13 @@ jobs:
           python -m pip install -e .[dev,security]
       - name: Workflow lint
         run: python -m automated_software_developer.cli ci lint-workflows
+      - name: Upload AutoSD log
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: autosd-log-workflow-lint
+          path: autosd.log
+          if-no-files-found: ignore
 
   fast_checks:
     if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'fast') }}
@@ -325,6 +332,128 @@ jobs:
           PY
         env:
           NEEDS: ${{ toJson(needs) }}
+      - name: Publish required job summary
+        if: ${{ always() }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          needs = json.loads(os.environ['NEEDS'])
+          lines = [
+              '## Required jobs status summary',
+              '',
+              '| Job | Result |',
+              '|---|---|',
+          ]
+          for job_name in sorted(needs):
+              result = needs[job_name].get('result', 'unknown')
+              emoji = '✅' if result == 'success' else ('⏭️' if result == 'skipped' else '❌')
+              lines.append(f'| `{job_name}` | {emoji} `{result}` |')
+
+          failed = [name for name, value in needs.items() if value.get('result') not in {'success', 'skipped'}]
+          if failed:
+              lines.extend([
+                  '',
+                  'Failed jobs can be opened directly from this workflow run in the **Jobs** list.',
+              ])
+
+          summary = '\n'.join(lines) + '\n'
+          Path('.github_step_summary_required_tmp').write_text(summary, encoding='utf-8')
+          print(summary)
+          PY
+          cat .github_step_summary_required_tmp >> "$GITHUB_STEP_SUMMARY"
+        env:
+          NEEDS: ${{ toJson(needs) }}
+
+
+  autosd_log_summary:
+    if: ${{ always() && (github.event_name != 'schedule' || github.event.schedule == '0 3 * * *') }}
+    needs:
+      - workflow_lint
+      - fast_checks
+      - test_shard
+      - coverage_guard
+      - coverage_report
+      - full_matrix_checks
+      - security_linux
+      - cli_smoke
+      - aggregate_required
+      - codeql_analyze
+      - enforce_pinned_actions
+      - pr_governance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download AutoSD log artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: autosd-log-*
+          path: autosd-log-artifacts
+          if-no-artifact-found: ignore
+      - name: Build AutoSD error/warning summary
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('autosd-log-artifacts')
+          summary_lines = [
+              '## AutoSD log summary',
+              '',
+              'The table below includes counts of `ERROR`, `WARNING`, and `CRITICAL` entries from each uploaded `autosd.log` artifact for this run.',
+              '',
+              '| Artifact | Errors | Warnings | Critical |',
+              '|---|---:|---:|---:|',
+          ]
+
+          log_files = sorted(root.rglob('autosd.log'))
+          if not log_files:
+              summary_lines.extend([
+                  '_No `autosd.log` artifacts were found for this run._',
+                  '',
+                  'If a job does not invoke `autosd`, no `autosd.log` file is produced.',
+              ])
+          else:
+              error_pattern = re.compile(r'\bERROR\b')
+              warn_pattern = re.compile(r'\bWARNING\b')
+              critical_pattern = re.compile(r'\bCRITICAL\b')
+              excerpt_lines: list[str] = []
+
+              for log_path in log_files:
+                  content_lines = log_path.read_text(encoding='utf-8', errors='replace').splitlines()
+                  joined = '\n'.join(content_lines)
+                  errors = len(error_pattern.findall(joined))
+                  warnings = len(warn_pattern.findall(joined))
+                  critical = len(critical_pattern.findall(joined))
+                  artifact_name = log_path.parent.name
+                  summary_lines.append(f'| `{artifact_name}` | {errors} | {warnings} | {critical} |')
+
+                  matching = [line for line in content_lines if (' ERROR ' in line or ' WARNING ' in line or ' CRITICAL ' in line)]
+                  if matching:
+                      excerpt_lines.append(f'### `{artifact_name}` notable entries')
+                      excerpt_lines.append('```text')
+                      excerpt_lines.extend(matching[:20])
+                      excerpt_lines.append('```')
+                      excerpt_lines.append('')
+
+              if excerpt_lines:
+                  summary_lines.extend(['', '### Sample log entries', ''])
+                  summary_lines.extend(excerpt_lines)
+
+          summary = '\n'.join(summary_lines) + '\n'
+          Path('autosd-log-summary.md').write_text(summary, encoding='utf-8')
+          print(summary)
+          with Path(Path.cwd() / '.github_step_summary_tmp').open('w', encoding='utf-8') as fh:
+              fh.write(summary)
+          PY
+          cat .github_step_summary_tmp >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload AutoSD log summary
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: autosd-log-summary
+          path: autosd-log-summary.md
 
   self_diagnosis:
     if: ${{ failure() && (github.event_name != 'schedule' || github.event.schedule == '0 3 * * *') }}
