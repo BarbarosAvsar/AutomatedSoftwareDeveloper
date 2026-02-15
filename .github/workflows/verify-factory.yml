@@ -20,4 +20,4 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
       - name: Verify factory
-        run: autosd verify-factory --path .
+        run: autosd verify-factory
