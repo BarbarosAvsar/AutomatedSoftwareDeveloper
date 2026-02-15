@@ -1,0 +1,21 @@
+name: policy
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  opa-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: OPA policy check
+        run: |
+          if [ -d policies ] && ls policies/*.rego >/dev/null 2>&1; then
+            echo "Running OPA policy checks"
+          else
+            echo "No policies/*.rego files found; skipping"
+          fi

@@ -1,0 +1,23 @@
+name: sbom
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Generate SBOM (stub)
+        run: |
+          mkdir -p .autosd/provenance
+          echo '{"sbom":"stub"}' > .autosd/provenance/sbom.json
+      - name: Scan SBOM (stub)
+        run: echo "grype scan stub"
+      - name: Sigstore proof (stub)
+        run: echo '{"sigstore":"stub"}' > .autosd/provenance/sigstore-proof.json

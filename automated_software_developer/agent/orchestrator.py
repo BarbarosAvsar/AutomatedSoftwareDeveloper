@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -36,6 +36,7 @@ from automated_software_developer.agent.config_validation import (
     validate_security_scan_mode,
 )
 from automated_software_developer.agent.design_doc import build_design_doc_markdown
+from automated_software_developer.agent.dev_agent import DevAgent
 from automated_software_developer.agent.executor import CommandExecutor
 from automated_software_developer.agent.filesystem import FileWorkspace
 from automated_software_developer.agent.github import ensure_repository_scaffold
@@ -51,6 +52,7 @@ from automated_software_developer.agent.models import (
     StoryExecutionState,
 )
 from automated_software_developer.agent.packaging import PackagingOrchestrator
+from automated_software_developer.agent.planner_agent import PlannerAgent
 from automated_software_developer.agent.planning import Planner
 from automated_software_developer.agent.platforms.catalog import (
     build_capability_graph,
@@ -69,6 +71,7 @@ from automated_software_developer.agent.provenance import (
     write_build_manifest,
 )
 from automated_software_developer.agent.providers.base import LLMProvider
+from automated_software_developer.agent.q_agent import QAgent
 from automated_software_developer.agent.quality import (
     QualityGateCacheEntry,
     QualityGateResult,
@@ -83,7 +86,9 @@ from automated_software_developer.agent.reproducibility import (
     enforce_lockfiles,
     write_build_hash,
 )
+from automated_software_developer.agent.requirement_agent import RequirementAgent
 from automated_software_developer.agent.requirements_refiner import RequirementsRefiner
+from automated_software_developer.agent.review_agent import ReviewAgent
 from automated_software_developer.agent.schemas import (
     validate_backlog_payload,
     validate_sprint_log_event,
@@ -92,6 +97,7 @@ from automated_software_developer.agent.security import (
     ensure_safe_relative_path,
     scan_workspace_for_secrets,
 )
+from automated_software_developer.agent.task_queue import SerialTaskQueue, TaskQueue
 
 DEFAULT_AGENTS_MD = (
     """
@@ -108,6 +114,7 @@ DEFAULT_AGENTS_MD = (
 )
 
 logger = logging.getLogger(__name__)
+RUN_METRICS: Counter[str] = Counter()
 
 
 @dataclass(frozen=True)
@@ -180,15 +187,22 @@ class SoftwareDevelopmentAgent:
         provider: LLMProvider,
         config: AgentConfig | None = None,
         pattern_store: PromptPatternStore | None = None,
+        task_queue: TaskQueue[BacklogStory, StoryPromptPrefetch] | None = None,
     ) -> None:
         """Create a software development agent with provider and runtime config."""
         self.provider = provider
         self.config = config or AgentConfig()
         self.planner = Planner(provider)
         self.refiner = RequirementsRefiner(provider)
+        self.requirement_agent = RequirementAgent(self.refiner)
+        self.planner_agent = PlannerAgent(self.planner)
+        self.dev_agent = DevAgent()
+        self.q_agent = QAgent()
+        self.review_agent = ReviewAgent()
         self.architecture_planner = ArchitecturePlanner(provider)
         self.executor = CommandExecutor(timeout_seconds=self.config.command_timeout_seconds)
         self.packaging = PackagingOrchestrator(self.executor)
+        self.task_queue = task_queue or SerialTaskQueue()
         self.pattern_store = pattern_store or PromptPatternStore()
         self.pattern_store.ensure_defaults()
 
@@ -203,7 +217,7 @@ class SoftwareDevelopmentAgent:
         ensure_repository_scaffold(workspace)
         repo_guidelines = workspace.read_optional("AGENTS.md")
         refinement_template = self.pattern_store.load_latest(REFINEMENT_TEMPLATE_ID)
-        refined = self.refiner.refine(
+        refined = self.requirement_agent.refine(
             requirements=requirements,
             repo_guidelines=repo_guidelines,
             template=refinement_template,
@@ -224,7 +238,7 @@ class SoftwareDevelopmentAgent:
         repo_guidelines = workspace.read_optional("AGENTS.md")
 
         refinement_template = self.pattern_store.load_latest(REFINEMENT_TEMPLATE_ID)
-        refined = self.refiner.refine(
+        refined = self.requirement_agent.refine(
             requirements=requirements,
             repo_guidelines=repo_guidelines,
             template=refinement_template,
@@ -264,6 +278,14 @@ class SoftwareDevelopmentAgent:
         if not requirements.strip():
             raise ValueError("requirements must be non-empty.")
 
+        RUN_METRICS["autosd.run.invocations"] += 1
+        logger.info(
+            {
+                "metric": "autosd.run.invocations",
+                "value": RUN_METRICS["autosd.run.invocations"],
+            }
+        )
+
         prompt_seed = self.config.prompt_seed_base if self.config.reproducible else None
         workspace = FileWorkspace(output_dir)
         workspace.ensure_exists()
@@ -273,7 +295,7 @@ class SoftwareDevelopmentAgent:
 
         refinement_template = self.pattern_store.load_latest(REFINEMENT_TEMPLATE_ID)
         story_template = self.pattern_store.load_latest(STORY_IMPLEMENTATION_TEMPLATE_ID)
-        refined = self.refiner.refine(
+        refined = self.requirement_agent.refine(
             requirements=requirements,
             repo_guidelines=repo_guidelines,
             template=refinement_template,
@@ -311,7 +333,7 @@ class SoftwareDevelopmentAgent:
             if workspace.read_optional(relative_path) is None:
                 workspace.write_file(relative_path, content)
 
-        backlog = self.planner.create_backlog(refined)
+        backlog = self.planner_agent.create_backlog(refined)
         self._persist_backlog(workspace, backlog)
         self._persist_design_doc(workspace, refined, backlog, phase="refinement-complete")
 
@@ -600,18 +622,10 @@ class SoftwareDevelopmentAgent:
             )
 
         prefetched: dict[str, StoryPromptPrefetch] = {}
-        with ThreadPoolExecutor(max_workers=self.config.parallel_prompt_workers) as executor:
-            future_map = {executor.submit(_prefetch, story): story.story_id for story in stories}
-            for future in as_completed(future_map):
-                story_id = future_map[future]
-                try:
-                    prefetched[story_id] = future.result()
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "Prefetch failed for story %s: %s",
-                        story_id,
-                        exc,
-                    )
+        # ThreadPoolExecutor has been intentionally replaced by a queue abstraction
+        # to support future Celery-backed asynchronous workers.
+        for story, result in zip(stories, self.task_queue.map(stories, _prefetch), strict=False):
+            prefetched[story.story_id] = result
         return prefetched
 
     def _execute_story(

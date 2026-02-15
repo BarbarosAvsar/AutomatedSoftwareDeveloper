@@ -41,6 +41,7 @@ from automated_software_developer.agent.ci.mirror import run_ci_mirror
 from automated_software_developer.agent.ci.workflow_lint import lint_workflows
 from automated_software_developer.agent.config_validation import (
     require_positive_int,
+    validate_provider_mode,
     validate_sbom_mode,
     validate_security_scan_mode,
 )
@@ -85,6 +86,7 @@ from automated_software_developer.agent.preauth.verify import grant_break_glass,
 from automated_software_developer.agent.providers.base import LLMProvider
 from automated_software_developer.agent.providers.mock_provider import MockProvider
 from automated_software_developer.agent.providers.openai_provider import OpenAIProvider
+from automated_software_developer.agent.providers.resilient_llm import ResilientLLM
 from automated_software_developer.agent.telemetry.policy import TelemetryPolicy
 from automated_software_developer.agent.telemetry.store import TelemetryStore
 from automated_software_developer.logging_utils import configure_logging
@@ -171,13 +173,20 @@ def _create_provider(
     mock_responses_file: Path | None,
 ) -> LLMProvider:
     """Create a model provider instance from CLI options."""
-    if provider == "openai":
+    try:
+        resolved_provider = validate_provider_mode(provider)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    if resolved_provider == "openai":
         return OpenAIProvider(model=model)
-    if provider == "mock":
-        if mock_responses_file is None:
-            raise typer.BadParameter("--mock-responses-file is required when provider=mock.")
-        return MockProvider(_load_mock_responses(mock_responses_file))
-    raise typer.BadParameter("provider must be one of: openai, mock")
+    if resolved_provider == "resilient":
+        primary = OpenAIProvider(model=model)
+        fallback = MockProvider([{}])
+        return ResilientLLM(primary=primary, fallback=fallback)
+    if mock_responses_file is None:
+        raise typer.BadParameter("--mock-responses-file is required when provider=mock.")
+    return MockProvider(_load_mock_responses(mock_responses_file))
 
 
 def _ensure_positive(value: int, field_name: str) -> int:
@@ -508,7 +517,7 @@ def run(
     ] = Path("generated_project"),
     provider: Annotated[
         str,
-        typer.Option(help="Model provider to use: openai or mock."),
+        typer.Option(help="Model provider to use: openai, resilient, or mock."),
     ] = "openai",
     model: Annotated[
         str,
@@ -909,7 +918,7 @@ def refine(
     ] = Path("generated_project"),
     provider: Annotated[
         str,
-        typer.Option(help="Model provider to use: openai or mock."),
+        typer.Option(help="Model provider to use: openai, resilient, or mock."),
     ] = "openai",
     model: Annotated[
         str,
@@ -951,7 +960,7 @@ def backlog_refine(
     ] = Path("generated_project"),
     provider: Annotated[
         str,
-        typer.Option(help="Model provider to use: openai or mock."),
+        typer.Option(help="Model provider to use: openai, resilient, or mock."),
     ] = "openai",
     model: Annotated[
         str,
@@ -1166,7 +1175,7 @@ def sprint_run(
     ] = Path("generated_project"),
     provider: Annotated[
         str,
-        typer.Option(help="Model provider to use: openai or mock."),
+        typer.Option(help="Model provider to use: openai, resilient, or mock."),
     ] = "openai",
     model: Annotated[
         str,
@@ -2609,7 +2618,7 @@ def daemon(
     ] = None,
     provider: Annotated[
         str,
-        typer.Option(help="Model provider to use: openai or mock."),
+        typer.Option(help="Model provider to use: openai, resilient, or mock."),
     ] = "openai",
     model: Annotated[
         str,

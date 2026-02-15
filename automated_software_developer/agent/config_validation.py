@@ -26,3 +26,8 @@ def validate_security_scan_mode(value: str) -> str:
 def validate_sbom_mode(value: str) -> str:
     """Validate SBOM mode option."""
     return validate_choice(value, "sbom_mode", {"off", "if-available", "required"})
+
+
+def validate_provider_mode(value: str) -> str:
+    """Validate provider mode option."""
+    return validate_choice(value, "provider", {"openai", "mock", "resilient"})

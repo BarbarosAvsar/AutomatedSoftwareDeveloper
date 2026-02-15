@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autosd-celery-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: autosd-celery-worker
+  template:
+    metadata:
+      labels:
+        app: autosd-celery-worker
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/barbarosavsar/automatedsoftwaredeveloper:latest
+          command: ["celery", "-A", "automated_software_developer.agent.task_queue", "worker", "--loglevel=info"]
