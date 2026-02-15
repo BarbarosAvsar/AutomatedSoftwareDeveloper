@@ -113,6 +113,15 @@ def build_quality_gate_plan(
     elif _has_mypy_config(workspace_dir):
         warnings.append("mypy config detected but mypy is not installed; skipping type gate.")
 
+    if _module_available("coverage"):
+        verification_commands.append(
+            "mkdir -p .autosd/provenance && "
+            "python -m coverage run -m pytest && "
+            "python -m coverage xml -o .autosd/provenance/coverage.xml"
+        )
+    else:
+        warnings.append("coverage is not available; skipping coverage artifact generation.")
+
     scan_enabled = enable_security_scan and security_scan_mode != "off"
     if scan_enabled:
         if _module_available("bandit"):
