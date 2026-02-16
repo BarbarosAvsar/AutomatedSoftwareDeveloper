@@ -780,6 +780,13 @@ class SoftwareDevelopmentAgent:
                         {"op": item.op, "path": item.path}
                         for item in (bundle.operations if bundle is not None else [])
                     ],
+                    "unified_actions": self._build_unified_actions(
+                        bundle=bundle,
+                        verification_commands=commands,
+                        command_results=last_results,
+                        error_text=error_text,
+                        quality_result_text=quality_result_text,
+                    ),
                     "verification_commands": commands,
                     "outcome": outcome,
                     "failing_checks": failing_checks,
@@ -961,6 +968,77 @@ class SoftwareDevelopmentAgent:
         if any_failure:
             lines.append("hint: rerun with --verbose and inspect autosd.log for details.")
         return "\n".join(lines)
+
+    def _build_unified_actions(
+        self,
+        *,
+        bundle: ExecutionBundle | None,
+        verification_commands: list[str],
+        command_results: list[CommandResult],
+        error_text: str | None,
+        quality_result_text: str | None,
+    ) -> list[dict[str, Any]]:
+        """Build one consolidated action timeline including inline error summaries."""
+        actions: list[dict[str, Any]] = []
+        for operation in bundle.operations if bundle is not None else []:
+            actions.append(
+                {
+                    "kind": "file_operation",
+                    "action": operation.op,
+                    "target": operation.path,
+                    "status": "applied",
+                    "error_summary": None,
+                }
+            )
+
+        results_by_command = {result.command: result for result in command_results}
+        for command in verification_commands:
+            result = results_by_command.get(command)
+            if result is None:
+                actions.append(
+                    {
+                        "kind": "verification_command",
+                        "action": command,
+                        "status": "not_executed",
+                        "error_summary": error_text,
+                    }
+                )
+                continue
+
+            error_summary: str | None = None
+            if not result.passed:
+                stderr = result.stderr.strip()
+                stdout = result.stdout.strip()
+                error_summary = stderr or stdout or f"Command exited with code {result.exit_code}."
+            actions.append(
+                {
+                    "kind": "verification_command",
+                    "action": command,
+                    "status": "passed" if result.passed else "failed",
+                    "error_summary": error_summary,
+                }
+            )
+
+        if quality_result_text is not None:
+            actions.append(
+                {
+                    "kind": "quality_gate",
+                    "action": "python_static_quality",
+                    "status": "failed",
+                    "error_summary": quality_result_text,
+                }
+            )
+
+        if error_text is not None and not actions:
+            actions.append(
+                {
+                    "kind": "execution",
+                    "action": "story_attempt",
+                    "status": "failed",
+                    "error_summary": error_text,
+                }
+            )
+        return actions
 
     def _format_quality_findings(self, result: QualityGateResult) -> str:
         """Render static quality findings into a single failure message."""

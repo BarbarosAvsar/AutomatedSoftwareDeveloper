@@ -168,9 +168,22 @@ def test_orchestrator_story_retry_and_artifacts(tmp_path: Path) -> None:
         (tmp_path / ".autosd" / "prompt_journal.jsonl").read_text(encoding="utf-8").splitlines()
     )
     assert len(journal_lines) == 3
-    outcomes = [json.loads(line).get("outcome") for line in journal_lines]
+    journal_entries = [json.loads(line) for line in journal_lines]
+    outcomes = [entry.get("outcome") for entry in journal_entries]
     assert outcomes.count("pass") == 2
     assert outcomes.count("fail") == 1
+
+    failed_story_entry = next(entry for entry in journal_entries if entry.get("outcome") == "fail")
+    unified_actions = failed_story_entry["unified_actions"]
+    assert isinstance(unified_actions, list)
+    assert any(action["kind"] == "file_operation" for action in unified_actions)
+    failed_verifications = [
+        action
+        for action in unified_actions
+        if action["kind"] == "verification_command" and action["status"] == "failed"
+    ]
+    assert failed_verifications
+    assert failed_verifications[0]["error_summary"]
 
 
 def test_agent_config_rejects_invalid_values() -> None:
