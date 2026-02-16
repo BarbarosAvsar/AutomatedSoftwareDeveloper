@@ -31,6 +31,14 @@ publishes the JSON schema for pipeline events and statuses.
 4. **Test** → unit + integration tests
 5. **Conformance** → generator fixture conformance
 
+Execution notes:
+
+- `.github/workflows/unified-actions.yml` is the authoritative CI executor.
+- Legacy workflow files (`ci-build.yml`, `policy.yml`, `sbom.yml`, `verify-factory.yml`)
+  are compatibility shims that mirror specific Unified Actions job outcomes.
+- Failed workflow runs are aggregated in one persistent issue: `CI Failure Dashboard`
+  (`ci-failures` label), retaining the most recent 30 failures.
+
 ## Pipeline Event Schema
 
 Pipeline events must conform to `PIPELINE_EVENT_SCHEMA` in

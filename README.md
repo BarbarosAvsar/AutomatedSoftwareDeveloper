@@ -324,6 +324,14 @@ python -m mypy automated_software_developer
 python -m pytest
 ```
 
+### GitHub Actions Model
+
+- `Unified Actions` (`.github/workflows/unified-actions.yml`) is the single authoritative CI workflow.
+- `ci-build.yml`, `policy.yml`, `sbom.yml`, and `verify-factory.yml` are compatibility shims that mirror
+  mapped Unified Actions job outcomes to preserve existing required-check contexts.
+- Failed runs are aggregated into one persistent GitHub issue (`CI Failure Dashboard`, label `ci-failures`)
+  with the latest 30 failures and direct run links.
+
 ## In-Repo Skills
 
 - `skills/agile-requirements-refiner/SKILL.md`

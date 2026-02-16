@@ -24,18 +24,15 @@ from automated_software_developer.agent.architecture import (
 )
 from automated_software_developer.agent.backlog import (
     STATUS_COMPLETED,
-    STATUS_FAILED,
     STATUS_IN_PROGRESS,
     StoryBacklog,
     parse_acceptance_criteria_assertions,
-    resolve_story_commands,
 )
 from automated_software_developer.agent.config_validation import (
     require_positive_int,
     validate_sbom_mode,
     validate_security_scan_mode,
 )
-from automated_software_developer.agent.design_doc import build_design_doc_markdown
 from automated_software_developer.agent.dev_agent import DevAgent
 from automated_software_developer.agent.executor import CommandExecutor
 from automated_software_developer.agent.filesystem import FileWorkspace
@@ -73,13 +70,8 @@ from automated_software_developer.agent.provenance import (
 from automated_software_developer.agent.providers.base import LLMProvider
 from automated_software_developer.agent.q_agent import QAgent
 from automated_software_developer.agent.quality import (
-    QualityGateCacheEntry,
-    QualityGateResult,
     build_quality_gate_plan,
-    compute_quality_gate_fingerprint,
     evaluate_python_quality,
-    load_quality_gate_cache,
-    save_quality_gate_cache,
 )
 from automated_software_developer.agent.reproducibility import (
     build_artifact_checksums,
@@ -89,9 +81,24 @@ from automated_software_developer.agent.reproducibility import (
 from automated_software_developer.agent.requirement_agent import RequirementAgent
 from automated_software_developer.agent.requirements_refiner import RequirementsRefiner
 from automated_software_developer.agent.review_agent import ReviewAgent
-from automated_software_developer.agent.schemas import (
-    validate_backlog_payload,
-    validate_sprint_log_event,
+from automated_software_developer.agent.runtime.artifact_persistence import (
+    append_sprint_log,
+    persist_backlog,
+    persist_design_doc,
+    persist_progress,
+    track_architecture_artifacts,
+)
+from automated_software_developer.agent.runtime.quality_runner import (
+    mark_cached_results,
+    run_quality_gate_commands,
+    serialize_gate_results,
+)
+from automated_software_developer.agent.runtime.story_execution import (
+    build_unified_actions,
+    command_failure_hints,
+    execute_story_loop,
+    format_quality_findings,
+    summarize_unified_action_errors,
 )
 from automated_software_developer.agent.security import (
     ensure_safe_relative_path,
@@ -641,171 +648,30 @@ class SoftwareDevelopmentAgent:
         prefetched: StoryPromptPrefetch | None = None,
     ) -> StoryExecutionState:
         """Execute one story with bounded retries and journaling."""
-        feedback: str | None = story.last_error
-        last_results: list[CommandResult] = []
-        max_attempts = self.config.max_task_attempts
-        default_commands = resolve_story_commands(story, backlog.global_verification_commands)
-
-        for attempt in range(1, max_attempts + 1):
-            snapshot = workspace.build_context_snapshot(
-                max_files=self.config.snapshot_max_files,
-                max_chars_per_file=self.config.snapshot_max_chars_per_file,
-            )
-            snapshot_hash = hash_text(snapshot)
-            prefetch_snapshot_match: bool | None = None
-            use_prefetch = (
-                prefetched is not None
-                and attempt == 1
-                and (
-                    prefetched.snapshot_hash == snapshot_hash
-                    or self.config.allow_stale_parallel_prompts
-                )
-            )
-            prefetched_data = prefetched if use_prefetch and prefetched is not None else None
-            if prefetched_data is not None:
-                system_prompt = prefetched_data.system_prompt
-                user_prompt = prefetched_data.user_prompt
-                prompt_fingerprint = prefetched_data.prompt_fingerprint
-                prefetch_snapshot_match = prefetched_data.snapshot_hash == snapshot_hash
-            else:
-                system_prompt = build_story_implementation_system_prompt(template)
-                user_prompt = build_story_implementation_user_prompt(
-                    refined_requirements_markdown=refined_markdown,
-                    story=story,
-                    project_snapshot=snapshot,
-                    fallback_verification_commands=backlog.global_verification_commands,
-                    previous_attempt_feedback=feedback,
-                    repo_guidelines=repo_guidelines,
-                )
-                prompt_fingerprint = hash_text(system_prompt + "\n" + user_prompt)
-            raw_response: dict[str, Any] | None = None
-            bundle: ExecutionBundle | None = None
-            commands = default_commands
-            error_text: str | None = None
-            quality_warnings: list[str] = []
-            quality_result_text: str | None = None
-            quality_cached = False
-
-            try:
-                if prefetched_data is not None:
-                    raw_response = prefetched_data.response
-                else:
-                    raw_response = self.provider.generate_json(
-                        system_prompt=system_prompt,
-                        user_prompt=user_prompt,
-                        seed=prompt_seed,
-                    )
-                bundle = ExecutionBundle.from_dict(raw_response)
-                self._apply_operations(bundle, workspace)
-                quality_plan = build_quality_gate_plan(
-                    workspace.base_dir,
-                    enforce_quality_gates=self.config.enforce_quality_gates,
-                    enable_security_scan=self.config.enable_security_scan,
-                    security_scan_mode=self.config.security_scan_mode,
-                )
-                quality_warnings = quality_plan.warnings
-                quality_commands = _dedupe_commands(
-                    [*quality_plan.format_commands, *quality_plan.verification_commands]
-                )
-                quality_results, quality_cached = self._run_quality_gate_commands(
-                    workspace,
-                    quality_commands,
-                )
-                verification_commands = _dedupe_commands(
-                    list(bundle.verification_commands or default_commands)
-                )
-                commands = [*quality_commands, *verification_commands]
-                if quality_results and not all(result.passed for result in quality_results):
-                    last_results = quality_results
-                else:
-                    verification_results = self.executor.run_many(
-                        verification_commands,
-                        cwd=workspace.base_dir,
-                    )
-                    last_results = [*quality_results, *verification_results]
-
-                static_quality = evaluate_python_quality(
-                    workspace.base_dir,
-                    enforce_docstrings=self.config.enforce_docstrings,
-                )
-                if not static_quality.passed:
-                    quality_result_text = self._format_quality_findings(static_quality)
-            except Exception as exc:  # noqa: BLE001
-                error_text = f"Story attempt failed before verification. Error: {exc}"
-                last_results = []
-
-            criteria_ok = self._acceptance_criteria_satisfied(story, workspace)
-            commands_passed = bool(last_results) and all(result.passed for result in last_results)
-            outcome = (
-                "pass"
-                if error_text is None
-                and commands_passed
-                and criteria_ok
-                and quality_result_text is None
-                else "fail"
-            )
-            unified_actions = self._build_unified_actions(
-                bundle=bundle,
-                verification_commands=commands,
-                command_results=last_results,
-                error_text=error_text,
-                quality_result_text=quality_result_text,
-                criteria_ok=criteria_ok,
-            )
-            failing_checks = None
-            if outcome == "fail":
-                failing_checks = self._summarize_unified_action_errors(unified_actions)
-                feedback = failing_checks
-
-            journal.append(
-                {
-                    "timestamp": self._now(),
-                    "phase": "story_execution",
-                    "template_id": template.template_id,
-                    "template_version": template.version,
-                    "story_id": story.story_id,
-                    "story_title": story.title,
-                    "attempt": attempt,
-                    "model_settings": {
-                        "provider": type(self.provider).__name__,
-                        "seed": prompt_seed,
-                    },
-                    "prompt_fingerprint": prompt_fingerprint,
-                    "response_fingerprint": hash_text(json.dumps(raw_response, sort_keys=True))
-                    if raw_response is not None
-                    else None,
-                    "prefetch_used": use_prefetch,
-                    "prefetch_snapshot_match": prefetch_snapshot_match,
-                    "tool_actions_requested": [
-                        {"op": item.op, "path": item.path}
-                        for item in (bundle.operations if bundle is not None else [])
-                    ],
-                    "unified_actions": unified_actions,
-                    "verification_commands": commands,
-                    "outcome": outcome,
-                    "failing_checks": failing_checks,
-                    "error": error_text,
-                    "quality_warnings": quality_warnings,
-                    "quality_cache_hit": quality_cached,
-                    "fix_iteration": attempt - 1,
-                }
-            )
-
-            if outcome == "pass":
-                return StoryExecutionState(
-                    story_id=story.story_id,
-                    attempt=attempt,
-                    status=STATUS_COMPLETED,
-                    verification_results=last_results,
-                    error=None,
-                )
-
-        return StoryExecutionState(
-            story_id=story.story_id,
-            attempt=max_attempts,
-            status=STATUS_FAILED,
-            verification_results=last_results,
-            error=feedback,
+        return execute_story_loop(
+            story=story,
+            workspace=workspace,
+            backlog=backlog,
+            refined_markdown=refined_markdown,
+            repo_guidelines=repo_guidelines,
+            template=template,
+            journal=journal,
+            prompt_seed=prompt_seed,
+            prefetched=prefetched,
+            max_attempts=self.config.max_task_attempts,
+            snapshot_max_files=self.config.snapshot_max_files,
+            snapshot_max_chars_per_file=self.config.snapshot_max_chars_per_file,
+            provider=self.provider,
+            executor=self.executor,
+            enforce_quality_gates=self.config.enforce_quality_gates,
+            enable_security_scan=self.config.enable_security_scan,
+            security_scan_mode=self.config.security_scan_mode,
+            enforce_docstrings=self.config.enforce_docstrings,
+            allow_stale_parallel_prompts=self.config.allow_stale_parallel_prompts,
+            apply_operations=self._apply_operations,
+            acceptance_criteria_satisfied=self._acceptance_criteria_satisfied,
+            run_quality_gate_commands=self._run_quality_gate_commands,
+            now=self._now,
         )
 
     def _append_journal_refinement_event(
@@ -870,49 +736,29 @@ class SoftwareDevelopmentAgent:
         platform_adapter_id: str | None = None,
     ) -> None:
         """Persist progress snapshot for compatibility and observability."""
-        output: dict[str, Any] = {
-            "project_name": refined.project_name,
-            "stack_rationale": refined.stack_rationale,
-            "verification_commands": backlog.global_verification_commands,
-            "refined_spec": self.config.refined_spec_file,
-            "backlog": self.config.backlog_file,
-            "design_doc": self.config.design_doc_file,
-            "platform_plan": self.config.platform_plan_file,
-            "capability_graph": self.config.capability_graph_file,
-            "architecture_doc": self.config.architecture_doc_file,
-            "architecture_components": self.config.architecture_components_file,
-            "architecture_adrs": self.config.architecture_adrs_dir,
-            "platform_adapter_id": platform_adapter_id,
-            "stories": [
-                {
-                    "id": item.story_id,
-                    "title": item.title,
-                    "status": item.status,
-                    "attempts": item.attempts,
-                    "last_error": item.last_error,
-                }
-                for item in backlog.stories
-            ],
-            # Legacy compatibility with prior progress schema.
-            "tasks": [
-                {
-                    "id": item.story_id,
-                    "title": item.title,
-                    "status": item.status,
-                    "attempts": item.attempts,
-                    "last_error": item.last_error,
-                    "results": [],
-                }
-                for item in backlog.stories
-            ],
-        }
-        workspace.write_file(self.config.progress_file, json.dumps(output, indent=2))
+        persist_progress(
+            workspace=workspace,
+            progress_file=self.config.progress_file,
+            refined_spec_file=self.config.refined_spec_file,
+            backlog_file=self.config.backlog_file,
+            design_doc_file=self.config.design_doc_file,
+            platform_plan_file=self.config.platform_plan_file,
+            capability_graph_file=self.config.capability_graph_file,
+            architecture_doc_file=self.config.architecture_doc_file,
+            architecture_components_file=self.config.architecture_components_file,
+            architecture_adrs_dir=self.config.architecture_adrs_dir,
+            backlog=backlog,
+            refined=refined,
+            platform_adapter_id=platform_adapter_id,
+        )
 
     def _persist_backlog(self, workspace: FileWorkspace, backlog: StoryBacklog) -> None:
         """Persist the latest backlog JSON artifact."""
-        payload = backlog.to_dict()
-        validate_backlog_payload(payload)
-        workspace.write_file(self.config.backlog_file, json.dumps(payload, indent=2))
+        persist_backlog(
+            workspace=workspace,
+            backlog_file=self.config.backlog_file,
+            backlog=backlog,
+        )
 
     def _persist_design_doc(
         self,
@@ -923,19 +769,21 @@ class SoftwareDevelopmentAgent:
         phase: str,
     ) -> None:
         """Persist or update internal design doc artifact."""
-        content = build_design_doc_markdown(refined=refined, backlog=backlog, phase=phase)
-        workspace.write_file(self.config.design_doc_file, content)
+        persist_design_doc(
+            workspace=workspace,
+            design_doc_file=self.config.design_doc_file,
+            refined=refined,
+            backlog=backlog,
+            phase=phase,
+        )
 
     def _append_sprint_log(self, workspace: FileWorkspace, payload: dict[str, Any]) -> None:
         """Append a sprint event to jsonl log."""
-        validate_sprint_log_event(payload)
-        path = ensure_safe_relative_path(workspace.base_dir, self.config.sprint_log_file)
-        root = workspace.base_dir.resolve()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload, ensure_ascii=True))
-            handle.write("\n")
-        workspace.changed_files.add(str(path.relative_to(root)).replace("\\", "/"))
+        append_sprint_log(
+            workspace=workspace,
+            sprint_log_file=self.config.sprint_log_file,
+            payload=payload,
+        )
 
     def _format_command_results(self, results: list[CommandResult]) -> str:
         """Render command outputs for debugging and retry feedback."""
@@ -974,125 +822,26 @@ class SoftwareDevelopmentAgent:
         criteria_ok: bool,
     ) -> list[dict[str, Any]]:
         """Build one consolidated action timeline including inline error summaries."""
-        actions: list[dict[str, Any]] = []
-        for operation in bundle.operations if bundle is not None else []:
-            actions.append(
-                {
-                    "kind": "file_operation",
-                    "action": operation.op,
-                    "target": operation.path,
-                    "status": "applied",
-                    "error_summary": None,
-                }
-            )
-
-        results_by_command = {result.command: result for result in command_results}
-        for command in verification_commands:
-            result = results_by_command.get(command)
-            if result is None:
-                actions.append(
-                    {
-                        "kind": "verification_command",
-                        "action": command,
-                        "status": "not_executed",
-                        "error_summary": error_text,
-                    }
-                )
-                continue
-
-            error_summary: str | None = None
-            if not result.passed:
-                stderr = result.stderr.strip()
-                stdout = result.stdout.strip()
-                error_summary = stderr or stdout or f"Command exited with code {result.exit_code}."
-            actions.append(
-                {
-                    "kind": "verification_command",
-                    "action": command,
-                    "status": "passed" if result.passed else "failed",
-                    "error_summary": error_summary,
-                }
-            )
-
-        if quality_result_text is not None:
-            actions.append(
-                {
-                    "kind": "quality_gate",
-                    "action": "python_static_quality",
-                    "status": "failed",
-                    "error_summary": quality_result_text,
-                }
-            )
-
-        actions.append(
-            {
-                "kind": "acceptance_criteria",
-                "action": "executable_checks",
-                "status": "passed" if criteria_ok else "failed",
-                "error_summary": (
-                    None
-                    if criteria_ok
-                    else "Executable acceptance criteria checks failed."
-                ),
-            }
+        return build_unified_actions(
+            bundle=bundle,
+            verification_commands=verification_commands,
+            command_results=command_results,
+            error_text=error_text,
+            quality_result_text=quality_result_text,
+            criteria_ok=criteria_ok,
         )
-
-        if error_text is not None and not actions:
-            actions.append(
-                {
-                    "kind": "execution",
-                    "action": "story_attempt",
-                    "status": "failed",
-                    "error_summary": error_text,
-                }
-            )
-        return actions
 
     def _summarize_unified_action_errors(self, actions: list[dict[str, Any]]) -> str:
         """Aggregate all unified-action errors into a deterministic retry summary."""
-        summary_lines: list[str] = []
-        for action in actions:
-            error_summary = str(action.get("error_summary") or "").strip()
-            if not error_summary:
-                continue
-            kind = str(action.get("kind") or "action")
-            name = str(action.get("action") or "unknown")
-            summary_lines.append(f"[{kind}] {name}: {error_summary}")
-        if summary_lines:
-            return "\n".join(summary_lines)
-        return "No explicit action errors recorded, but story outcome was fail."
+        return summarize_unified_action_errors(actions)
 
-    def _format_quality_findings(self, result: QualityGateResult) -> str:
+    def _format_quality_findings(self, result: Any) -> str:
         """Render static quality findings into a single failure message."""
-        lines: list[str] = ["Static quality gates failed."]
-        syntax_errors = result.syntax_errors
-        doc_violations = result.docstring_violations
-        if syntax_errors:
-            lines.append("Syntax errors:")
-            lines.extend(f"- {item}" for item in syntax_errors)
-        if doc_violations:
-            lines.append("Docstring violations:")
-            lines.extend(f"- {item}" for item in doc_violations)
-        return "\n".join(lines)
+        return format_quality_findings(result)
 
     def _command_failure_hints(self, result: CommandResult) -> list[str]:
         """Derive actionable hints from command failures."""
-        if result.exit_code == 0:
-            return []
-        combined = f"{result.stdout}\n{result.stderr}".lower()
-        hints: list[str] = []
-        if "no module named" in combined or "command not found" in combined:
-            if "ruff" in result.command:
-                hints.append("Install ruff (python -m pip install ruff) or disable quality gates.")
-            if "mypy" in result.command:
-                hints.append("Install mypy (python -m pip install mypy) or adjust mypy config.")
-            if "pytest" in result.command:
-                hints.append("Install pytest (python -m pip install pytest) or update test scope.")
-            if "bandit" in result.command:
-                hints.append("Install bandit or set --security-scan-mode if-available.")
-        if "permission denied" in combined:
-            hints.append("Check filesystem permissions for generated project files.")
-        return hints
+        return command_failure_hints(result)
 
     def _ensure_agents_md(self, workspace: FileWorkspace) -> None:
         """Create default AGENTS.md in generated workspace if absent."""
@@ -1105,10 +854,7 @@ class SoftwareDevelopmentAgent:
         artifacts: ArchitectureArtifacts,
     ) -> None:
         """Track architecture artifacts in workspace change list."""
-        root = workspace.base_dir.resolve()
-        for path in [artifacts.architecture_doc, artifacts.components_json, *artifacts.adr_files]:
-            resolved = path.resolve()
-            workspace.changed_files.add(str(resolved.relative_to(root)).replace("\\", "/"))
+        track_architecture_artifacts(workspace=workspace, artifacts=artifacts)
 
     def _now(self) -> str:
         """Return deterministic timestamp when reproducible mode is enabled."""
@@ -1122,79 +868,29 @@ class SoftwareDevelopmentAgent:
         commands: list[str],
     ) -> tuple[list[CommandResult], bool]:
         """Run quality gate commands with cache support."""
-        if not commands:
-            return [], False
         config_payload = {
             "enforce_quality_gates": self.config.enforce_quality_gates,
             "enable_security_scan": self.config.enable_security_scan,
             "security_scan_mode": self.config.security_scan_mode,
             "enforce_docstrings": self.config.enforce_docstrings,
         }
-        fingerprint = compute_quality_gate_fingerprint(
-            workspace.base_dir,
+        return run_quality_gate_commands(
+            workspace=workspace,
             commands=commands,
-            config=config_payload,
+            executor=self.executor,
+            config_payload=config_payload,
         )
-        cache = load_quality_gate_cache(workspace.base_dir)
-        if (
-            cache is not None
-            and cache.fingerprint == fingerprint
-            and cache.commands == commands
-            and cache.results
-            and all(result.passed for result in cache.results)
-        ):
-            return self._mark_cached_results(cache.results), True
-
-        results = self.executor.run_many(commands, cwd=workspace.base_dir)
-        if results and all(result.passed for result in results):
-            post_fingerprint = compute_quality_gate_fingerprint(
-                workspace.base_dir,
-                commands=commands,
-                config=config_payload,
-            )
-            save_quality_gate_cache(
-                workspace.base_dir,
-                QualityGateCacheEntry(
-                    fingerprint=post_fingerprint,
-                    commands=commands,
-                    results=results,
-                ),
-            )
-        return results, False
 
     def _mark_cached_results(self, results: list[CommandResult]) -> list[CommandResult]:
         """Annotate cached command results for visibility."""
-        cached_results: list[CommandResult] = []
-        for item in results:
-            note = "cached: previous success\n"
-            stdout = item.stdout
-            if note not in stdout:
-                stdout = f"{note}{stdout}".strip()
-            cached_results.append(
-                CommandResult(
-                    command=item.command,
-                    exit_code=item.exit_code,
-                    stdout=stdout,
-                    stderr=item.stderr,
-                    duration_seconds=item.duration_seconds,
-                )
-            )
-        return cached_results
+        return mark_cached_results(results)
 
     def _serialize_gate_results(self, results: list[CommandResult]) -> list[dict[str, Any]]:
         """Serialize gate results for provenance reporting."""
-        duration_override = 0.0 if self.config.reproducible else None
-        output: list[dict[str, Any]] = []
-        for item in results:
-            duration = duration_override if duration_override is not None else item.duration_seconds
-            output.append(
-                {
-                    "command": item.command,
-                    "exit_code": item.exit_code,
-                    "duration_seconds": duration,
-                }
-            )
-        return output
+        return serialize_gate_results(
+            results=results,
+            reproducible=self.config.reproducible,
+        )
 
 
 def _dedupe_commands(commands: list[str]) -> list[str]:

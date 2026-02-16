@@ -6,18 +6,28 @@ on:
     branches: [ main ]
 
 permissions:
+  actions: read
   contents: read
+  issues: write
 
 jobs:
   sbom:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-      - name: Generate SBOM (stub)
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - name: Resolve sbom status from Unified Actions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p .autosd/provenance
-          echo '{"sbom":"stub"}' > .autosd/provenance/sbom.json
-      - name: Scan SBOM (stub)
-        run: echo "grype scan stub"
-      - name: Sigstore proof (stub)
-        run: echo '{"sigstore":"stub"}' > .autosd/provenance/sigstore-proof.json
+          python scripts/ci/resolve_unified_job_status.py --job sbom
+      - name: Update CI failure dashboard
+        if: ${{ failure() || cancelled() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FAILED_JOB: sbom=${{ job.status }}
+        run: |
+          python scripts/ci/update_failure_dashboard.py --failed-job "$FAILED_JOB"

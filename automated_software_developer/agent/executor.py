@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess  # nosec B404
 import time
 from pathlib import Path
@@ -27,7 +28,8 @@ class CommandExecutor:
 
         start = time.perf_counter()
         if os.name == "nt":
-            shell_command = ["powershell", "-NoProfile", "-Command", command]
+            normalized = self._normalize_windows_command(command)
+            shell_command = ["powershell", "-NoProfile", "-Command", normalized]
         else:
             shell_command = ["bash", "-lc", command]
 
@@ -57,3 +59,21 @@ class CommandExecutor:
             if result.exit_code != 0:
                 break
         return results
+
+    def _normalize_windows_command(self, command: str) -> str:
+        """Normalize common POSIX shell patterns into PowerShell-compatible commands."""
+        parts = [part.strip() for part in command.split("&&")]
+        normalized_parts = [self._normalize_windows_command_part(part) for part in parts]
+        if len(normalized_parts) == 1:
+            return normalized_parts[0]
+        guard = "; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } ; "
+        return guard.join(normalized_parts)
+
+    def _normalize_windows_command_part(self, command: str) -> str:
+        """Normalize a single command part for PowerShell execution."""
+        match = re.fullmatch(r"mkdir\s+-p\s+(.+)", command.strip())
+        if match is None:
+            return command
+        raw_path = match.group(1).strip().strip("'\"")
+        escaped_path = raw_path.replace("'", "''")
+        return f"New-Item -ItemType Directory -Force -Path '{escaped_path}' | Out-Null"
