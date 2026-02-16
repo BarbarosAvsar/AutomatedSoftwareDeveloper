@@ -177,6 +177,13 @@ def test_orchestrator_story_retry_and_artifacts(tmp_path: Path) -> None:
     unified_actions = failed_story_entry["unified_actions"]
     assert isinstance(unified_actions, list)
     assert any(action["kind"] == "file_operation" for action in unified_actions)
+    failed_acceptance = [
+        action
+        for action in unified_actions
+        if action["kind"] == "acceptance_criteria" and action["status"] == "failed"
+    ]
+    assert failed_acceptance
+    assert failed_acceptance[0]["error_summary"]
     failed_verifications = [
         action
         for action in unified_actions
@@ -184,6 +191,9 @@ def test_orchestrator_story_retry_and_artifacts(tmp_path: Path) -> None:
     ]
     assert failed_verifications
     assert failed_verifications[0]["error_summary"]
+    failing_checks = failed_story_entry["failing_checks"]
+    assert "[verification_command]" in failing_checks
+    assert "[acceptance_criteria]" in failing_checks
 
 
 def test_agent_config_rejects_invalid_values() -> None:

@@ -744,17 +744,17 @@ class SoftwareDevelopmentAgent:
                 and quality_result_text is None
                 else "fail"
             )
+            unified_actions = self._build_unified_actions(
+                bundle=bundle,
+                verification_commands=commands,
+                command_results=last_results,
+                error_text=error_text,
+                quality_result_text=quality_result_text,
+                criteria_ok=criteria_ok,
+            )
             failing_checks = None
             if outcome == "fail":
-                failing_checks = error_text or self._format_command_results(last_results)
-                if not criteria_ok:
-                    failing_checks = (
-                        failing_checks + "\n" if failing_checks else ""
-                    ) + "Executable acceptance criteria checks failed."
-                if quality_result_text is not None:
-                    failing_checks = (
-                        failing_checks + "\n" if failing_checks else ""
-                    ) + quality_result_text
+                failing_checks = self._summarize_unified_action_errors(unified_actions)
                 feedback = failing_checks
 
             journal.append(
@@ -780,13 +780,7 @@ class SoftwareDevelopmentAgent:
                         {"op": item.op, "path": item.path}
                         for item in (bundle.operations if bundle is not None else [])
                     ],
-                    "unified_actions": self._build_unified_actions(
-                        bundle=bundle,
-                        verification_commands=commands,
-                        command_results=last_results,
-                        error_text=error_text,
-                        quality_result_text=quality_result_text,
-                    ),
+                    "unified_actions": unified_actions,
                     "verification_commands": commands,
                     "outcome": outcome,
                     "failing_checks": failing_checks,
@@ -977,6 +971,7 @@ class SoftwareDevelopmentAgent:
         command_results: list[CommandResult],
         error_text: str | None,
         quality_result_text: str | None,
+        criteria_ok: bool,
     ) -> list[dict[str, Any]]:
         """Build one consolidated action timeline including inline error summaries."""
         actions: list[dict[str, Any]] = []
@@ -1029,6 +1024,19 @@ class SoftwareDevelopmentAgent:
                 }
             )
 
+        actions.append(
+            {
+                "kind": "acceptance_criteria",
+                "action": "executable_checks",
+                "status": "passed" if criteria_ok else "failed",
+                "error_summary": (
+                    None
+                    if criteria_ok
+                    else "Executable acceptance criteria checks failed."
+                ),
+            }
+        )
+
         if error_text is not None and not actions:
             actions.append(
                 {
@@ -1039,6 +1047,20 @@ class SoftwareDevelopmentAgent:
                 }
             )
         return actions
+
+    def _summarize_unified_action_errors(self, actions: list[dict[str, Any]]) -> str:
+        """Aggregate all unified-action errors into a deterministic retry summary."""
+        summary_lines: list[str] = []
+        for action in actions:
+            error_summary = str(action.get("error_summary") or "").strip()
+            if not error_summary:
+                continue
+            kind = str(action.get("kind") or "action")
+            name = str(action.get("action") or "unknown")
+            summary_lines.append(f"[{kind}] {name}: {error_summary}")
+        if summary_lines:
+            return "\n".join(summary_lines)
+        return "No explicit action errors recorded, but story outcome was fail."
 
     def _format_quality_findings(self, result: QualityGateResult) -> str:
         """Render static quality findings into a single failure message."""
