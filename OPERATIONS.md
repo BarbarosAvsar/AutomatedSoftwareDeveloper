@@ -142,8 +142,7 @@ Use `--verbose` for additional debug logging in `autosd.log`.
 - If CI mirror fails, inspect `verify_factory_report.json` for the failing gate.
 - Use the `CI Failure Dashboard` issue (label `ci-failures`) as the single-click failure index
   across workflows. The dashboard keeps the latest 30 failed runs with links and failed-job names.
-- For legacy workflow checks (`ci-build`, `policy`, `sbom`, `verify-factory`), failures are mirrored
-  from `Unified Actions` job results by compatibility shim workflows.
+- `Unified Actions` is the only CI workflow and the source of truth for CI status.
 
 
 ## Operational SLOs / SLIs

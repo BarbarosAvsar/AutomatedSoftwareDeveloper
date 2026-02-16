@@ -34,8 +34,7 @@ publishes the JSON schema for pipeline events and statuses.
 Execution notes:
 
 - `.github/workflows/unified-actions.yml` is the authoritative CI executor.
-- Legacy workflow files (`ci-build.yml`, `policy.yml`, `sbom.yml`, `verify-factory.yml`)
-  are compatibility shims that mirror specific Unified Actions job outcomes.
+- `.github/workflows/unified-actions.yml` is the only workflow file used for CI execution.
 - Failed workflow runs are aggregated in one persistent issue: `CI Failure Dashboard`
   (`ci-failures` label), retaining the most recent 30 failures.
 

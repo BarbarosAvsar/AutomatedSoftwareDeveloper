@@ -44,7 +44,7 @@ permissions:
   security-events: write
 
 concurrency:
-  group: unified-actions-${{ github.ref }}
+  group: unified-actions-global
   cancel-in-progress: true
 
 env:
