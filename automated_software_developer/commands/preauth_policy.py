@@ -6,6 +6,7 @@ from __future__ import annotations
 # ruff: noqa: B008,F403,F405,I001
 from automated_software_developer.commands.common import *
 
+
 @policy_app.command("show")
 def policy_show(
     project: Annotated[
@@ -117,7 +118,6 @@ def policy_show(
         console.print(grant_table)
         if grant_result is not None and not grant_result.valid:
             raise typer.Exit(code=1)
-
 
 
 @preauth_app.command("init-keys")

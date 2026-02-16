@@ -6,6 +6,7 @@ from __future__ import annotations
 # ruff: noqa: B008,F403,F405,I001
 from automated_software_developer.commands.common import *
 
+
 @app.command("halt")
 def halt_project(
     project: Annotated[str, typer.Option(help="Project ID or exact name.")],
@@ -47,7 +48,6 @@ def resume_project(
     metadata["resumed_at"] = datetime.now(tz=UTC).isoformat()
     registry.update(entry.project_id, automation_halted=False, metadata=metadata)
     console.print(f"Automation resumed for '{entry.project_id}'.")
-
 
 
 @app.command("patch")

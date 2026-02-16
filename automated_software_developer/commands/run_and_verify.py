@@ -6,6 +6,7 @@ from __future__ import annotations
 # ruff: noqa: B008,F403,F405,I001
 from automated_software_developer.commands.common import *
 
+
 @app.callback()
 def main(
     version: Annotated[
@@ -399,7 +400,6 @@ def verify_factory(
         raise typer.Exit(code=1)
 
 
-
 @app.command()
 def refine(
     requirements_file: Annotated[
@@ -440,7 +440,6 @@ def refine(
     artifact_path = output_dir / ".autosd" / "refined_requirements.md"
     console.print(f"Refined specification written to: {artifact_path}")
     console.print(f"Stories identified: {len(refined.stories)}")
-
 
 
 @app.command()
@@ -503,7 +502,6 @@ def learn(
                 f"- {update.template_id}: v{update.old_version} -> v{update.new_version} "
                 f"({update.path})"
             )
-
 
 
 @app.command("daemon")

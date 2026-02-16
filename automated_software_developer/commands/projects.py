@@ -6,6 +6,7 @@ from __future__ import annotations
 # ruff: noqa: B008,F403,F405,I001
 from automated_software_developer.commands.common import *
 
+
 @projects_app.command("list")
 def projects_list(
     registry_path: Annotated[
@@ -137,7 +138,6 @@ def projects_retire(
     console.print(
         f"Project '{updated.project_id}' retired. automation_halted={updated.automation_halted}"
     )
-
 
 
 @dashboard_app.command("serve")

@@ -6,6 +6,7 @@ from __future__ import annotations
 # ruff: noqa: B008,F403,F405,I001
 from automated_software_developer.commands.common import *
 
+
 @ci_app.command("mirror")
 def ci_mirror(
     path: Annotated[
@@ -36,7 +37,6 @@ def ci_lint_workflows(
             console.print(f"[FAIL] {result.path}: {', '.join(result.errors)}")
         raise typer.Exit(code=1)
     console.print("[PASS] All workflows linted successfully.")
-
 
 
 @plugins_app.command("list")

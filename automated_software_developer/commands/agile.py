@@ -6,6 +6,7 @@ from __future__ import annotations
 # ruff: noqa: B008,F403,F405,I001
 from automated_software_developer.commands.common import *
 
+
 @backlog_app.command("refine")
 def backlog_refine(
     requirements_file: Annotated[

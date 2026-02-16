@@ -366,5 +366,3 @@ def _resolve_verified_grant(
 
 
 __all__ = [name for name in globals() if not name.startswith("__")]
-
-

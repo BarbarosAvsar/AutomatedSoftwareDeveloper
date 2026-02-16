@@ -79,10 +79,7 @@ def execute_story_loop(
         use_prefetch = (
             prefetched is not None
             and attempt == 1
-            and (
-                prefetched.snapshot_hash == snapshot_hash
-                or allow_stale_parallel_prompts
-            )
+            and (prefetched.snapshot_hash == snapshot_hash or allow_stale_parallel_prompts)
         )
         prefetched_data = prefetched if use_prefetch and prefetched is not None else None
         if prefetched_data is not None:
@@ -295,9 +292,7 @@ def build_unified_actions(
             "action": "executable_checks",
             "status": "passed" if criteria_ok else "failed",
             "error_summary": (
-                None
-                if criteria_ok
-                else "Executable acceptance criteria checks failed."
+                None if criteria_ok else "Executable acceptance criteria checks failed."
             ),
         }
     )
