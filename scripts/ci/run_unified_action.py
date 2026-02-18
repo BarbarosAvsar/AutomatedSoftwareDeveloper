@@ -413,7 +413,9 @@ def run_unified_action(
         StageConfig(
             name="verify_factory",
             command=(
-                "autosd",
+                sys.executable,
+                "-m",
+                "automated_software_developer.cli",
                 "verify-factory",
                 "--verify-report-path",
                 str(verify_report_path),
