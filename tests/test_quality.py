@@ -37,6 +37,35 @@ def test_quality_plan_includes_python_commands_for_python_project(tmp_path: Path
     assert "compileall" in commands
 
 
+def test_quality_plan_skips_coverage_without_pytest_targets(tmp_path: Path) -> None:
+    (tmp_path / "app.py").write_text("def main():\n    return 1\n", encoding="utf-8")
+    plan = build_quality_gate_plan(
+        tmp_path,
+        enforce_quality_gates=True,
+        enable_security_scan=False,
+        security_scan_mode="if-available",
+    )
+    commands = " | ".join(plan.verification_commands)
+    assert "coverage run -m pytest" not in commands
+    assert any("skipping coverage artifact generation" in item.lower() for item in plan.warnings)
+
+
+def test_quality_plan_includes_coverage_with_pytest_targets(tmp_path: Path) -> None:
+    (tmp_path / "app.py").write_text("def main():\n    return 1\n", encoding="utf-8")
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_app.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+    plan = build_quality_gate_plan(
+        tmp_path,
+        enforce_quality_gates=True,
+        enable_security_scan=False,
+        security_scan_mode="if-available",
+    )
+    commands = " | ".join(plan.verification_commands)
+    if "coverage run -m pytest" in commands:
+        assert "coverage xml -o .autosd/provenance/coverage.xml" in commands
+
+
 def test_quality_static_detects_missing_docstrings_and_syntax_error(tmp_path: Path) -> None:
     (tmp_path / "bad.py").write_text("def missing():\n    return 1\n", encoding="utf-8")
     (tmp_path / "broken.py").write_text("def broken(\n", encoding="utf-8")

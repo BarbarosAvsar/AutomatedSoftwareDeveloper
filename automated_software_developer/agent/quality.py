@@ -114,11 +114,16 @@ def build_quality_gate_plan(
         warnings.append("mypy config detected but mypy is not installed; skipping type gate.")
 
     if _module_available("coverage"):
-        verification_commands.append(
-            "mkdir -p .autosd/provenance && "
-            "python -m coverage run -m pytest && "
-            "python -m coverage xml -o .autosd/provenance/coverage.xml"
-        )
+        if _has_pytest_targets(workspace_dir):
+            verification_commands.append(
+                "mkdir -p .autosd/provenance && "
+                "python -m coverage run -m pytest && "
+                "python -m coverage xml -o .autosd/provenance/coverage.xml"
+            )
+        else:
+            warnings.append(
+                "No pytest test files detected; skipping coverage artifact generation."
+            )
     else:
         warnings.append("coverage is not available; skipping coverage artifact generation.")
 
@@ -273,6 +278,17 @@ def _has_mypy_config(workspace_dir: Path) -> bool:
         if "[tool.mypy]" in content.lower():
             return True
     return False
+
+
+def _has_pytest_targets(workspace_dir: Path) -> bool:
+    """Return whether workspace appears to include pytest-discoverable test files."""
+    tests_dir = workspace_dir / "tests"
+    patterns = ("test_*.py", "*_test.py")
+    if tests_dir.exists():
+        for pattern in patterns:
+            if any(tests_dir.rglob(pattern)):
+                return True
+    return any(any(workspace_dir.glob(pattern)) for pattern in patterns)
 
 
 def _module_available(module_name: str) -> bool:
