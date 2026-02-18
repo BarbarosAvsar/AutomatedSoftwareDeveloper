@@ -14,7 +14,7 @@ from automated_software_developer.agent.pipeline.schema import (
 def test_pipeline_truth_map_contains_pipelines() -> None:
     pipelines = pipeline_truth_map()
     ids = {pipeline.pipeline_id for pipeline in pipelines}
-    assert {"generator", "ui", "ci"}.issubset(ids)
+    assert {"generator", "ci"}.issubset(ids)
 
 
 def test_pipeline_event_schema_and_validation() -> None:

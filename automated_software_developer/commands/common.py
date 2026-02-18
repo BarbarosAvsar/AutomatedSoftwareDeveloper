@@ -42,6 +42,7 @@ from automated_software_developer.agent.ci.mirror import run_ci_mirror
 from automated_software_developer.agent.ci.workflow_lint import lint_workflows
 from automated_software_developer.agent.config_validation import (
     require_positive_int,
+    validate_execution_mode,
     validate_provider_mode,
     validate_sbom_mode,
     validate_security_scan_mode,
@@ -91,13 +92,6 @@ from automated_software_developer.agent.providers.resilient_llm import Resilient
 from automated_software_developer.agent.telemetry.policy import TelemetryPolicy
 from automated_software_developer.agent.telemetry.store import TelemetryStore
 from automated_software_developer.logging_utils import configure_logging
-from automated_software_developer.ui_cli import (
-    UICommandError,
-    UIServeConfig,
-    install_windows_shortcuts,
-    remove_windows_shortcuts,
-    serve_ui,
-)
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 projects_app = typer.Typer(no_args_is_help=True)
@@ -110,7 +104,6 @@ sprint_app = typer.Typer(no_args_is_help=True)
 plugins_app = typer.Typer(no_args_is_help=True)
 ci_app = typer.Typer(no_args_is_help=True)
 policy_app = typer.Typer(no_args_is_help=True)
-ui_app = typer.Typer(no_args_is_help=True)
 console = Console()
 
 app.add_typer(projects_app, name="projects")
@@ -123,7 +116,6 @@ app.add_typer(sprint_app, name="sprint")
 app.add_typer(plugins_app, name="plugins")
 app.add_typer(ci_app, name="ci")
 app.add_typer(policy_app, name="policy")
-app.add_typer(ui_app, name="ui")
 
 
 def _version_callback(value: bool) -> None:
@@ -210,6 +202,14 @@ def _validate_sbom_mode(value: str) -> str:
     """Validate SBOM mode option."""
     try:
         return validate_sbom_mode(value)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+def _validate_execution_mode(value: str) -> str:
+    """Validate execution mode option."""
+    try:
+        return validate_execution_mode(value)
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
 

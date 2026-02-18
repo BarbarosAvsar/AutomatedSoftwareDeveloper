@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import subprocess  # nosec B404
+import sys
 import time
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -270,22 +271,33 @@ def _validate_workflow_gate(project_dir: Path) -> GateResult:
 def _run_ci_entrypoint(project_dir: Path) -> list[GateResult]:
     """Run the standardized CI entrypoint script."""
     script = project_dir / "ci" / "run_ci.sh"
-    if not script.is_file():
+    python_script = project_dir / "ci" / "run_ci.py"
+    if not script.is_file() and not python_script.is_file():
         return [
             GateResult(
                 name="ci_entrypoint",
                 passed=False,
-                notes=["ci/run_ci.sh missing"],
+                notes=["ci/run_ci.sh and ci/run_ci.py missing"],
             )
         ]
     if which("bash") is None:
+        if python_script.is_file():
+            return [
+                _run_command(
+                    "ci_entrypoint",
+                    [sys.executable, "./ci/run_ci.py"],
+                    project_dir,
+                )
+            ]
         return [
             GateResult(
                 name="ci_entrypoint",
-                passed=True,
-                notes=["Skipped ci/run_ci.sh because bash is unavailable."],
+                passed=False,
+                notes=["bash unavailable and ci/run_ci.py missing"],
             )
         ]
+    if not script.is_file():
+        return [_run_command("ci_entrypoint", [sys.executable, "./ci/run_ci.py"], project_dir)]
     return [_run_command("ci_entrypoint", ["bash", "./ci/run_ci.sh"], project_dir)]
 
 

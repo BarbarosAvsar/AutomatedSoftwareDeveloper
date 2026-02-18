@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from automated_software_developer.agent.daemon import CompanyDaemon, DaemonConfig
 from automated_software_developer.agent.providers.mock_provider import MockProvider
 
@@ -116,3 +118,43 @@ def test_daemon_cycle_creates_project_and_postmortem(tmp_path: Path) -> None:
 
     postmortems = list((projects_dir / "daemon_project" / ".autosd" / "postmortems").glob("*.md"))
     assert postmortems
+
+
+def test_daemon_planning_mode_skips_release_and_deploy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requirements_dir = tmp_path / "requirements"
+    projects_dir = tmp_path / "projects"
+    registry_path = tmp_path / "registry.jsonl"
+    incidents_path = tmp_path / "incidents.jsonl"
+    requirements_dir.mkdir()
+    requirements_file = requirements_dir / "planning_project.md"
+    requirements_file.write_text("Plan only", encoding="utf-8")
+
+    def _raise_if_called(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise AssertionError("release/deploy should not be called in planning mode")
+
+    monkeypatch.setattr(
+        "automated_software_developer.agent.daemon.ReleaseManager.create_release",
+        _raise_if_called,
+    )
+    monkeypatch.setattr(
+        "automated_software_developer.agent.daemon.OperationsAgent.handle",
+        _raise_if_called,
+    )
+
+    planning_only_response = [_mock_responses()[0]]
+    provider = MockProvider(planning_only_response)
+    config = DaemonConfig(
+        requirements_dir=requirements_dir,
+        projects_dir=projects_dir,
+        registry_path=registry_path,
+        incidents_path=incidents_path,
+        execution_mode="planning",
+    )
+    daemon = CompanyDaemon(provider=provider, config=config)
+    processed = daemon.run_once()
+    assert "planning_project" in processed
+    assert (projects_dir / "planning_project" / ".autosd" / "sprints").exists()

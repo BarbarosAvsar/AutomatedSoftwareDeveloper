@@ -1,4 +1,4 @@
-# Pipeline Truth Map
+﻿# Pipeline Truth Map
 
 This repository uses a single authoritative pipeline map defined in
 `automated_software_developer/agent/pipeline/schema.py`. That module is referenced by
@@ -7,36 +7,28 @@ publishes the JSON schema for pipeline events and statuses.
 
 ## Generator Pipeline
 
-1. **Refine** → draft, refine, validate, lock
-2. **Plan** → architecture, backlog, sprint_planning
-3. **Sprint** → stories_in_progress, stories_completed
-4. **Gates** → tests, quality_gates, security_scans
-5. **Release** → version_tag, artifacts
-6. **Deploy** → dev, staging, production
-7. **Monitor** → health_checks
-8. **Learn** → retrospective, template_proposals
-
-## UI Pipeline
-
-1. **Requirements Studio** → capture + refine requirements
-2. **Approve** → lock requirements before autonomy
-3. **Launch** → start autonomous build
-4. **Progress / ETA** → monitor pipeline and ETA updates
+1. **Refine** -> draft, refine, validate, lock
+2. **Plan** -> architecture, backlog, sprint_planning
+3. **Sprint** -> stories_in_progress, stories_completed
+4. **Gates** -> tests, quality_gates, security_scans
+5. **Release** -> version_tag, artifacts
+6. **Deploy** -> dev, staging, production
+7. **Monitor** -> health_checks
+8. **Learn** -> retrospective, template_proposals
 
 ## CI Pipeline
 
-1. **Workflow Lint** → validate workflow syntax and policy compliance
-2. **Lint** → ruff linting
-3. **Typecheck** → mypy type checking
-4. **Test** → unit + integration tests
-5. **Conformance** → generator fixture conformance
+1. **Quality Gates** -> ruff, mypy, pytest
+2. **Factory Conformance** -> `autosd verify-factory --skip-generator-gates`
+3. **Failure Summary** -> unified summary, append-only ledger, dashboard update
 
 Execution notes:
 
 - `.github/workflows/unified-actions.yml` is the authoritative CI executor.
 - `.github/workflows/unified-actions.yml` is the only workflow file used for CI execution.
-- Failed workflow runs are aggregated in one persistent issue: `CI Failure Dashboard`
-  (`ci-failures` label), retaining the most recent 30 failures.
+- Failed workflow runs are documented in:
+  - local append-only ledger: `.autosd/ci/failure_ledger.jsonl`
+  - persistent issue: `CI Failure Dashboard` (`ci-failures` label, latest 30 failures)
 
 ## Pipeline Event Schema
 

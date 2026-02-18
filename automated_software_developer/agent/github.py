@@ -34,77 +34,86 @@ DEFAULT_CI_ENTRYPOINT = (
     """#!/usr/bin/env bash
 set -euo pipefail
 
-python -m pip install --upgrade pip
+python ci/run_ci.py
+""".strip()
+    + "\n"
+)
 
-if [ -f pyproject.toml ]; then
-  python -m pip install -e .[dev] || python -m pip install -e .
-fi
+DEFAULT_CI_ENTRYPOINT_PY = (
+    """
+\"\"\"Cross-platform CI entrypoint for generated projects.\"\"\"
 
-if [ -f requirements.txt ]; then
-  python -m pip install -r requirements.txt
-fi
+from __future__ import annotations
 
-python -m compileall -q .
-
-if python - <<'PY'
 import importlib.util
-raise SystemExit(0 if importlib.util.find_spec("ruff") else 1)
-PY
-then
-  python -m ruff format --check .
-  python -m ruff check .
-else
-  echo "ruff not installed; skipping format/lint"
-fi
-
-if python - <<'PY'
-import importlib.util
+import subprocess  # nosec B404
+import sys
+from collections.abc import Sequence
 from pathlib import Path
 
-if not importlib.util.find_spec("mypy"):
-    raise SystemExit(1)
 
-paths = [Path("mypy.ini"), Path("setup.cfg"), Path("pyproject.toml")]
-if paths[0].exists():
-    raise SystemExit(0)
-if paths[1].exists() and "[mypy" in paths[1].read_text(encoding="utf-8", errors="ignore").lower():
-    raise SystemExit(0)
-if paths[2].exists() and "[tool.mypy]" in paths[2].read_text(
-    encoding="utf-8",
-    errors="ignore",
-).lower():
-    raise SystemExit(0)
-raise SystemExit(1)
-PY
-then
-  python -m mypy .
-else
-  echo "mypy not configured; skipping type check"
-fi
+def _run(args: Sequence[str]) -> int:
+    \"\"\"Run one command and return its exit code.\"\"\"
+    result = subprocess.run(args, check=False)  # nosec B603
+    return int(result.returncode)
 
-if [ -d tests ] || [ -f pytest.ini ] || [ -f pyproject.toml ]; then
-  if python - <<'PY'
-import importlib.util
-raise SystemExit(0 if importlib.util.find_spec("pytest") else 1)
-PY
-  then
-    python -m pytest -q
-  else
-    echo "pytest not installed; skipping tests"
-  fi
-else
-  echo "No tests found"
-fi
 
-if python - <<'PY'
-import importlib.util
-raise SystemExit(0 if importlib.util.find_spec("build") else 1)
-PY
-then
-  python -m build
-else
-  echo "build module not available; skipping package build"
-fi
+def _module_available(module: str) -> bool:
+    \"\"\"Return whether a module is importable.\"\"\"
+    return importlib.util.find_spec(module) is not None
+
+
+def _has_mypy_config() -> bool:
+    \"\"\"Return whether mypy config exists in the project.\"\"\"
+    mypy_ini = Path(\"mypy.ini\")
+    if mypy_ini.exists():
+        return True
+    setup_cfg = Path(\"setup.cfg\")
+    if setup_cfg.exists():
+        content = setup_cfg.read_text(encoding=\"utf-8\", errors=\"ignore\").lower()
+        if \"[mypy\" in content:
+            return True
+    pyproject = Path(\"pyproject.toml\")
+    if pyproject.exists():
+        content = pyproject.read_text(encoding=\"utf-8\", errors=\"ignore\").lower()
+        if \"[tool.mypy]\" in content:
+            return True
+    return False
+
+
+def main() -> int:
+    \"\"\"Execute generated-project CI checks.\"\"\"
+    if _run([sys.executable, \"-m\", \"compileall\", \"-q\", \".\"]) != 0:
+        return 1
+
+    if _module_available(\"ruff\"):
+        if _run([sys.executable, \"-m\", \"ruff\", \"format\", \"--check\", \".\"]) != 0:
+            return 1
+        if _run([sys.executable, \"-m\", \"ruff\", \"check\", \".\"]) != 0:
+            return 1
+
+    if _module_available(\"mypy\") and _has_mypy_config():
+        if _run([sys.executable, \"-m\", \"mypy\", \".\"]) != 0:
+            return 1
+
+    has_tests = (
+        Path(\"tests\").exists()
+        or Path(\"pytest.ini\").exists()
+        or Path(\"pyproject.toml\").exists()
+    )
+    if has_tests and _module_available(\"pytest\"):
+        if _run([sys.executable, \"-m\", \"pytest\", \"-q\"]) != 0:
+            return 1
+
+    if _module_available(\"build\"):
+        if _run([sys.executable, \"-m\", \"build\"]) != 0:
+            return 1
+
+    return 0
+
+
+if __name__ == \"__main__\":
+    raise SystemExit(main())
 """.strip()
     + "\n"
 )
@@ -115,9 +124,9 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
 
 permissions:
   contents: read
@@ -154,6 +163,8 @@ def ensure_repository_scaffold(workspace: FileWorkspace) -> None:
         workspace.write_file(".gitignore", DEFAULT_GITIGNORE)
     if workspace.read_optional(".github/workflows/ci.yml") is None:
         workspace.write_file(".github/workflows/ci.yml", DEFAULT_PYTHON_CI_WORKFLOW)
+    if workspace.read_optional("ci/run_ci.py") is None:
+        workspace.write_file("ci/run_ci.py", DEFAULT_CI_ENTRYPOINT_PY)
     if workspace.read_optional("ci/run_ci.sh") is None:
         workspace.write_file("ci/run_ci.sh", DEFAULT_CI_ENTRYPOINT)
         workspace.set_executable("ci/run_ci.sh")

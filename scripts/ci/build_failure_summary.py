@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 
 ERROR_PATTERN = re.compile(r"\bERROR\b")
@@ -119,6 +120,32 @@ def build_summary(
     return "\n".join(lines) + "\n"
 
 
+def append_failure_ledger(*, failed_jobs: dict[str, str], ledger_path: Path) -> None:
+    """Append a machine-readable failure entry to local ledger."""
+    if not failed_jobs:
+        return
+    run_id = os.environ.get("GITHUB_RUN_ID", "")
+    workflow = os.environ.get("GITHUB_WORKFLOW", "")
+    branch = os.environ.get("GITHUB_REF_NAME", "")
+    sha = os.environ.get("GITHUB_SHA", "")
+    server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    run_url = f"{server_url}/{repository}/actions/runs/{run_id}" if repository and run_id else ""
+    payload = {
+        "timestamp_utc": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "run_id": run_id,
+        "workflow": workflow,
+        "branch": branch,
+        "sha7": sha[:7],
+        "failed_jobs": [{"job": job, "result": result} for job, result in failed_jobs.items()],
+        "run_url": run_url,
+    }
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    with ledger_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, sort_keys=True))
+        handle.write("\n")
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -151,6 +178,12 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Optional explicit NEEDS json payload. Defaults to NEEDS env var.",
     )
+    parser.add_argument(
+        "--ledger-path",
+        type=Path,
+        default=Path(".autosd/ci/failure_ledger.jsonl"),
+        help="Path for append-only local failure ledger.",
+    )
     return parser.parse_args()
 
 
@@ -171,6 +204,7 @@ def main() -> int:
     args.summary_path.write_text(summary, encoding="utf-8")
     failed_payload = [{"job": name, "result": result} for name, result in failed_jobs.items()]
     args.failed_jobs_path.write_text(json.dumps(failed_payload, indent=2), encoding="utf-8")
+    append_failure_ledger(failed_jobs=failed_jobs, ledger_path=args.ledger_path)
     print(summary)
     return 0
 

@@ -33,6 +33,7 @@ def load_fixtures() -> list[ConformanceFixture]:
                 "README.md",
                 "api/README.md",
                 "ci/run_ci.sh",
+                "ci/run_ci.py",
                 ".github/workflows/ci.yml",
             ],
         ),
@@ -45,6 +46,7 @@ def load_fixtures() -> list[ConformanceFixture]:
                 "README.md",
                 "cli/README.md",
                 "ci/run_ci.sh",
+                "ci/run_ci.py",
                 ".github/workflows/ci.yml",
             ],
         ),
@@ -57,6 +59,7 @@ def load_fixtures() -> list[ConformanceFixture]:
                 "README.md",
                 "frontend/README.md",
                 "ci/run_ci.sh",
+                "ci/run_ci.py",
                 ".github/workflows/ci.yml",
                 "frontend/index.html",
             ],
@@ -69,6 +72,7 @@ def load_fixtures() -> list[ConformanceFixture]:
             required_paths=[
                 "README.md",
                 "ci/run_ci.sh",
+                "ci/run_ci.py",
                 ".github/workflows/ci.yml",
                 "mypy.ini",
             ],
@@ -83,6 +87,7 @@ def load_fixtures() -> list[ConformanceFixture]:
             required_paths=[
                 "README.md",
                 "ci/run_ci.sh",
+                "ci/run_ci.py",
                 ".github/workflows/ci.yml",
                 "mypy.ini",
             ],
@@ -96,6 +101,7 @@ def load_fixtures() -> list[ConformanceFixture]:
             required_paths=[
                 "README.md",
                 "ci/run_ci.sh",
+                "ci/run_ci.py",
                 ".github/workflows/ci.yml",
             ],
             security_scan_mode="required",
@@ -108,6 +114,7 @@ def load_fixtures() -> list[ConformanceFixture]:
             required_paths=[
                 "README.md",
                 "ci/run_ci.sh",
+                "ci/run_ci.py",
                 ".github/workflows/ci.yml",
             ],
         ),

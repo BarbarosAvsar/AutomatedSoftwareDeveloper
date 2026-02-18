@@ -136,13 +136,25 @@ Use `--verbose` for additional debug logging in `autosd.log`.
 ### CI Troubleshooting
 
 - Run the same CI entrypoint locally:
-  - `./ci/run_ci.sh`
+  - `python ci/run_ci.py`
+  - or `./ci/run_ci.sh`
 - Lint workflows locally:
   - `autosd ci lint-workflows`
 - If CI mirror fails, inspect `verify_factory_report.json` for the failing gate.
 - Use the `CI Failure Dashboard` issue (label `ci-failures`) as the single-click failure index
   across workflows. The dashboard keeps the latest 30 failed runs with links and failed-job names.
+- Use `.autosd/ci/failure_ledger.jsonl` for local append-only failure history.
 - `Unified Actions` is the only CI workflow and the source of truth for CI status.
+
+## Planning-First Execution Modes
+
+`autosd run` and `autosd daemon` accept:
+
+- `--execution-mode direct`
+- `--execution-mode planning`
+- `--execution-mode auto`
+
+`auto` resolves through agent policy to planning-first behavior (`auto -> planning`).
 
 
 ## Operational SLOs / SLIs

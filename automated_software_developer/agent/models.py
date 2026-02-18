@@ -569,3 +569,6 @@ class RunSummary:
     architecture_components_path: Path | None = None
     architecture_adrs_path: Path | None = None
     build_hash_path: Path | None = None
+    requested_execution_mode: str | None = None
+    selected_execution_mode: str | None = None
+    execution_mode_reason: str | None = None

@@ -155,6 +155,12 @@ def run(
         str,
         typer.Option(help="SBOM behavior: off, if-available, required."),
     ] = "if-available",
+    execution_mode: Annotated[
+        str,
+        typer.Option(
+            help="Execution mode: direct, planning, auto (auto resolves to planning-first).",
+        ),
+    ] = "direct",
     gitops_enable: Annotated[
         bool,
         typer.Option(
@@ -195,6 +201,7 @@ def run(
     )
     security_scan_mode = _validate_security_scan_mode(security_scan_mode)
     sbom_mode = _validate_sbom_mode(sbom_mode)
+    execution_mode = _validate_execution_mode(execution_mode)
     if conformance_seed is not None:
         conformance_seed = _ensure_positive(conformance_seed, "conformance-seed")
     config = AgentConfig(
@@ -216,6 +223,7 @@ def run(
         else AgentConfig().prompt_seed_base,
         parallel_prompt_workers=parallel_prompt_workers,
         allow_stale_parallel_prompts=allow_stale_parallel_prompts,
+        execution_mode=execution_mode,
     )
     agent = SoftwareDevelopmentAgent(provider=resolved_provider, config=config)
 
@@ -250,6 +258,12 @@ def run(
         table.add_row("Architecture ADRs", str(summary.architecture_adrs_path))
     if summary.build_hash_path is not None:
         table.add_row("Build Hash", str(summary.build_hash_path))
+    if summary.requested_execution_mode is not None:
+        table.add_row("Execution Mode (Requested)", summary.requested_execution_mode)
+    if summary.selected_execution_mode is not None:
+        table.add_row("Execution Mode (Selected)", summary.selected_execution_mode)
+    if summary.execution_mode_reason is not None:
+        table.add_row("Execution Mode Rationale", summary.execution_mode_reason)
     console.print(table)
 
     console.print("\nVerification commands:")
@@ -553,6 +567,12 @@ def daemon(
             help="Execute deploy steps when possible.",
         ),
     ] = False,
+    execution_mode: Annotated[
+        str,
+        typer.Option(
+            help="Execution mode: direct, planning, auto (auto resolves to planning-first).",
+        ),
+    ] = "direct",
     max_cycles: Annotated[
         int,
         typer.Option(help="Maximum daemon cycles (0 for infinite)."),
@@ -564,6 +584,7 @@ def daemon(
 ) -> None:
     """Run the non-interactive autonomous company workflow daemon."""
     resolved_provider = _create_provider(provider, model, mock_responses_file)
+    execution_mode = _validate_execution_mode(execution_mode)
     config = DaemonConfig(
         requirements_dir=requirements_dir,
         projects_dir=projects_dir,
@@ -573,6 +594,7 @@ def daemon(
         environment=environment,
         deploy_target=deploy_target,
         execute_deploy=execute_deploy,
+        execution_mode=execution_mode,
     )
     daemon_runner = CompanyDaemon(provider=resolved_provider, config=config)
     cycles_run = 0

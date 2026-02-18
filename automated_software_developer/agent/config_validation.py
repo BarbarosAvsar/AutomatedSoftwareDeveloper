@@ -31,3 +31,8 @@ def validate_sbom_mode(value: str) -> str:
 def validate_provider_mode(value: str) -> str:
     """Validate provider mode option."""
     return validate_choice(value, "provider", {"openai", "mock", "resilient"})
+
+
+def validate_execution_mode(value: str) -> str:
+    """Validate execution mode option."""
+    return validate_choice(value, "execution_mode", {"direct", "planning", "auto"})

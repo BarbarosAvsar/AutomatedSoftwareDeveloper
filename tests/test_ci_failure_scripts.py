@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 
@@ -55,3 +56,23 @@ def test_failure_dashboard_data_block_roundtrip() -> None:
     entries = parsed.get("entries", [])
     assert isinstance(entries, list)
     assert entries and entries[0]["run_id"] == "123"
+
+
+def test_append_failure_ledger_writes_jsonl(tmp_path: Path, monkeypatch) -> None:
+    script = _load_module("scripts/ci/build_failure_summary.py")
+    ledger = tmp_path / ".autosd" / "ci" / "failure_ledger.jsonl"
+    monkeypatch.setenv("GITHUB_RUN_ID", "456")
+    monkeypatch.setenv("GITHUB_WORKFLOW", "Unified Actions")
+    monkeypatch.setenv("GITHUB_REF_NAME", "main")
+    monkeypatch.setenv("GITHUB_SHA", "abcdef123456")
+    monkeypatch.setenv("GITHUB_SERVER_URL", "https://github.com")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    script.append_failure_ledger(
+        failed_jobs={"quality_gates": "failure"},
+        ledger_path=ledger,
+    )
+    lines = ledger.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    payload = json.loads(lines[0])
+    assert payload["run_id"] == "456"
+    assert payload["failed_jobs"][0]["job"] == "quality_gates"

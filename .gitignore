@@ -20,10 +20,6 @@ venv/
 env/
 *.egg-info/
 
-# Frontend
-ui/frontend/node_modules/
-ui/frontend/dist/
-
 # OS/editor
 .DS_Store
 Thumbs.db

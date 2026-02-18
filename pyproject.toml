@@ -17,9 +17,6 @@ dependencies = [
  "rich>=13.7.1",
  "openai>=1.40.0",
  "cryptography>=42.0.0",
- "fastapi>=0.111.0",
- "uvicorn>=0.30.0",
- "pypdf>=4.3.1",
  "pyyaml>=6.0.1"
 ]
 
@@ -73,10 +70,7 @@ exclude = ["tests/"]
 module = [
  "openai",
  "openai.*",
- "pypdf",
  "cryptography",
  "cryptography.*",
- "uvicorn",
- "uvicorn.*",
 ]
 ignore_missing_imports = true

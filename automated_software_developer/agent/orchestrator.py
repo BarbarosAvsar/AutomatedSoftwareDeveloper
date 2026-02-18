@@ -30,6 +30,7 @@ from automated_software_developer.agent.backlog import (
 )
 from automated_software_developer.agent.config_validation import (
     require_positive_int,
+    validate_execution_mode,
     validate_sbom_mode,
     validate_security_scan_mode,
 )
@@ -51,6 +52,10 @@ from automated_software_developer.agent.models import (
 from automated_software_developer.agent.packaging import PackagingOrchestrator
 from automated_software_developer.agent.planner_agent import PlannerAgent
 from automated_software_developer.agent.planning import Planner
+from automated_software_developer.agent.planning_mode_agent import (
+    PlanningModeDecision,
+    PlanningModeSelectorAgent,
+)
 from automated_software_developer.agent.platforms.catalog import (
     build_capability_graph,
     select_platform_adapter,
@@ -160,6 +165,7 @@ class AgentConfig:
     build_hash_file: str = ".autosd/provenance/build_hash.json"
     parallel_prompt_workers: int = 1
     allow_stale_parallel_prompts: bool = False
+    execution_mode: str = "direct"
 
     def __post_init__(self) -> None:
         """Validate configuration values eagerly."""
@@ -172,6 +178,7 @@ class AgentConfig:
         if self.preferred_platform is not None and not self.preferred_platform.strip():
             raise ValueError("preferred_platform cannot be blank when provided.")
         require_positive_int(self.parallel_prompt_workers, "parallel_prompt_workers")
+        validate_execution_mode(self.execution_mode)
 
 
 @dataclass(frozen=True)
@@ -211,6 +218,7 @@ class SoftwareDevelopmentAgent:
         self.packaging = PackagingOrchestrator(self.executor)
         self.task_queue = task_queue or SerialTaskQueue()
         self.pattern_store = pattern_store or PromptPatternStore()
+        self.mode_selector = PlanningModeSelectorAgent()
         self.pattern_store.ensure_defaults()
 
     def refine_requirements(self, requirements: str, output_dir: Path) -> RefinedRequirements:
@@ -284,6 +292,16 @@ class SoftwareDevelopmentAgent:
         """Execute the full refine -> backlog sprint -> verify workflow."""
         if not requirements.strip():
             raise ValueError("requirements must be non-empty.")
+        mode_decision = self.mode_selector.select(
+            requested_mode=self.config.execution_mode,
+            requirements=requirements,
+        )
+        if mode_decision.selected_mode == "planning":
+            return self._run_planning_only(
+                requirements=requirements,
+                output_dir=output_dir,
+                mode_decision=mode_decision,
+            )
 
         RUN_METRICS["autosd.run.invocations"] += 1
         logger.info(
@@ -581,6 +599,41 @@ class SoftwareDevelopmentAgent:
                 self.config.architecture_adrs_dir,
             ),
             build_hash_path=build_hash_path,
+            requested_execution_mode=mode_decision.requested_mode,
+            selected_execution_mode=mode_decision.selected_mode,
+            execution_mode_reason=mode_decision.reason,
+        )
+
+    def _run_planning_only(
+        self,
+        *,
+        requirements: str,
+        output_dir: Path,
+        mode_decision: PlanningModeDecision,
+    ) -> RunSummary:
+        """Run planning artifacts only without implementation/deployment stages."""
+        artifacts = self.run_scrum_cycle(requirements=requirements, output_dir=output_dir)
+        backlog_payload = json.loads(artifacts["backlog"].read_text(encoding="utf-8"))
+        stories = backlog_payload.get("stories", [])
+        project_name = backlog_payload.get("project_name", "Planning Project")
+        changed_files = [
+            str(path.relative_to(output_dir)).replace("\\", "/")
+            for path in artifacts.values()
+            if path.exists()
+        ]
+        return RunSummary(
+            output_dir=output_dir.resolve(),
+            project_name=str(project_name),
+            stack_rationale="planning-only mode",
+            tasks_total=len(stories) if isinstance(stories, list) else 0,
+            tasks_completed=0,
+            changed_files=sorted(changed_files),
+            verification_results=[],
+            refined_spec_path=artifacts.get("refined_requirements"),
+            backlog_path=artifacts.get("backlog"),
+            requested_execution_mode=mode_decision.requested_mode,
+            selected_execution_mode=mode_decision.selected_mode,
+            execution_mode_reason=mode_decision.reason,
         )
 
     def _prefetch_story_prompts(

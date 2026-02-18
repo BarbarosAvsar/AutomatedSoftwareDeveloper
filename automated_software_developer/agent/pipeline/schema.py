@@ -126,32 +126,6 @@ def pipeline_truth_map() -> tuple[PipelineDefinition, ...]:
             ),
         ),
         PipelineDefinition(
-            pipeline_id="ui",
-            name="UI Pipeline",
-            steps=(
-                PipelineStep(
-                    step_id="requirements_studio",
-                    name="Requirements Studio",
-                    description="Capture and refine requirements with stakeholders.",
-                ),
-                PipelineStep(
-                    step_id="approve",
-                    name="Approve",
-                    description="Lock requirements before autonomous execution.",
-                ),
-                PipelineStep(
-                    step_id="launch",
-                    name="Launch",
-                    description="Initiate autonomous build and gates.",
-                ),
-                PipelineStep(
-                    step_id="progress_eta",
-                    name="Progress / ETA",
-                    description="Track execution progress and ETA updates.",
-                ),
-            ),
-        ),
-        PipelineDefinition(
             pipeline_id="ci",
             name="CI Pipeline",
             steps=(

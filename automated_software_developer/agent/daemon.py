@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from automated_software_developer.agent.audit import AuditLogger
+from automated_software_developer.agent.config_validation import validate_execution_mode
 from automated_software_developer.agent.departments.base import AgentContext, WorkOrder
 from automated_software_developer.agent.departments.engineering import EngineeringAgent
 from automated_software_developer.agent.departments.operations import (
@@ -22,6 +23,7 @@ from automated_software_developer.agent.deploy import (
 from automated_software_developer.agent.incidents.engine import IncidentEngine
 from automated_software_developer.agent.orchestrator import SoftwareDevelopmentAgent
 from automated_software_developer.agent.patching import PatchEngine
+from automated_software_developer.agent.planning_mode_agent import PlanningModeSelectorAgent
 from automated_software_developer.agent.policy.engine import (
     EffectivePolicy,
     resolve_effective_policy,
@@ -43,6 +45,11 @@ class DaemonConfig:
     environment: str = "staging"
     deploy_target: str = "generic_container"
     execute_deploy: bool = False
+    execution_mode: str = "direct"
+
+    def __post_init__(self) -> None:
+        """Validate daemon configuration values eagerly."""
+        validate_execution_mode(self.execution_mode)
 
 
 class CompanyDaemon:
@@ -58,6 +65,7 @@ class CompanyDaemon:
         """Initialize daemon with provider and configuration."""
         self.provider = provider
         self.config = config
+        self.mode_selector = PlanningModeSelectorAgent()
         self.registry = PortfolioRegistry(
             write_path=config.registry_path,
             read_paths=[config.registry_path],
@@ -88,8 +96,27 @@ class CompanyDaemon:
             requirements = requirements_file.read_text(encoding="utf-8")
             project_dir = self.config.projects_dir / project_id
             policy = resolve_effective_policy(project_policy=None, grant=None)
+            mode_decision = self.mode_selector.select(
+                requested_mode=self.config.execution_mode,
+                requirements=requirements,
+            )
             scrum_agent = SoftwareDevelopmentAgent(provider=_clone_provider(self.provider))
             _ = scrum_agent.run_scrum_cycle(requirements=requirements, output_dir=project_dir)
+            if mode_decision.selected_mode == "planning":
+                self.registry.register_project(
+                    project_id=project_id,
+                    name=project_id,
+                    domain="autonomous",
+                    platforms=["cli_tool"],
+                    metadata={
+                        "local_path": str(project_dir),
+                        "execution_mode": mode_decision.selected_mode,
+                        "execution_mode_reason": mode_decision.reason,
+                    },
+                )
+                processed.append(project_id)
+                _archive_requirements(requirements_file)
+                continue
             engineering = EngineeringAgent(provider=self.provider)
             _ = engineering.handle(
                 context=_build_agent_context(
@@ -109,7 +136,11 @@ class CompanyDaemon:
                 name=project_id,
                 domain="autonomous",
                 platforms=["cli_tool"],
-                metadata={"local_path": str(project_dir)},
+                metadata={
+                    "local_path": str(project_dir),
+                    "execution_mode": mode_decision.selected_mode,
+                    "execution_mode_reason": mode_decision.reason,
+                },
             )
             _ = self.release_manager.create_release(
                 project_dir=project_dir,

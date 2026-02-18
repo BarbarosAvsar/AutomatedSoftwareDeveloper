@@ -17,7 +17,7 @@ name: Container Build
 on:
   workflow_dispatch:
   push:
-    branches: [main, master]
+    branches: [main]
 
 jobs:
   build:

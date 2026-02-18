@@ -17,7 +17,7 @@ name: Deploy Pages
 on:
   workflow_dispatch:
   push:
-    branches: [main, master]
+    branches: [main]
 
 permissions:
   contents: read
