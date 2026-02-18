@@ -118,6 +118,41 @@ def test_runner_success_produces_empty_failed_jobs(tmp_path: Path) -> None:
     assert not ledger_path.exists()
 
 
+def test_stage_env_overrides_take_precedence(tmp_path: Path, monkeypatch) -> None:
+    script = _load_module("scripts/ci/run_unified_action.py")
+    monkeypatch.setenv("AUTOSD_CI_PIP_AUDIT_REQUIRED", "1")
+    events_path = tmp_path / "ci-unified-events.jsonl"
+    summary_path = tmp_path / "ci-unified-summary.md"
+    failed_jobs_path = tmp_path / "failed-jobs.json"
+    ledger_path = tmp_path / ".autosd" / "ci" / "failure_ledger.jsonl"
+    verify_report_path = tmp_path / "verify_factory_report.json"
+    conformance_report_path = tmp_path / "conformance" / "report.json"
+    stages = [
+        script.StageConfig(
+            name="env_override_check",
+            command=(
+                sys.executable,
+                "-c",
+                "import os,sys;"
+                "sys.exit(0 if os.environ.get('AUTOSD_CI_PIP_AUDIT_REQUIRED') == '0' else 3)",
+            ),
+            env_overrides={"AUTOSD_CI_PIP_AUDIT_REQUIRED": "0"},
+        )
+    ]
+    exit_code = script.run_unified_action(
+        events_path=events_path,
+        summary_path=summary_path,
+        failed_jobs_path=failed_jobs_path,
+        ledger_path=ledger_path,
+        verify_report_path=verify_report_path,
+        conformance_report_path=conformance_report_path,
+        stages=stages,
+        update_dashboard=False,
+    )
+    assert exit_code == 0
+    assert json.loads(failed_jobs_path.read_text(encoding="utf-8")) == []
+
+
 def test_unified_workflow_single_job_and_runner_invocation() -> None:
     workflow = Path(".github/workflows/unified-actions.yml").read_text(encoding="utf-8")
     assert "jobs:\n  unified_action:" in workflow

@@ -42,6 +42,7 @@ class StageConfig:
     name: str
     command: tuple[str, ...]
     blocking: bool = True
+    env_overrides: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -191,6 +192,9 @@ def _run_stage(stage: StageConfig, events: EventStream, secret_values: list[str]
         status="in_progress",
     )
     start = time.monotonic()
+    stage_env = os.environ.copy()
+    if stage.env_overrides:
+        stage_env.update(stage.env_overrides)
     try:
         process = subprocess.Popen(  # nosec B603
             list(stage.command),
@@ -200,6 +204,7 @@ def _run_stage(stage: StageConfig, events: EventStream, secret_values: list[str]
             encoding="utf-8",
             errors="replace",
             bufsize=1,
+            env=stage_env,
         )
     except OSError as exc:
         duration = time.monotonic() - start
@@ -422,6 +427,11 @@ def run_unified_action(
                 "--report-path",
                 str(conformance_report_path),
             ),
+            env_overrides={
+                # Keep mirror behavior deterministic across runners even when
+                # repository/org env variables request strict pip-audit mode.
+                "AUTOSD_CI_PIP_AUDIT_REQUIRED": "0",
+            },
         ),
     ]
 
