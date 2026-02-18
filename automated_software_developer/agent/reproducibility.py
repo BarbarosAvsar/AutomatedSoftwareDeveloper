@@ -25,6 +25,8 @@ IGNORED_REPRODUCIBILITY_PATHS = {
     ".autosd/sprint_log.jsonl",
     ".autosd/prompt_journal.jsonl",
     ".autosd/provenance/quality_gate_cache.json",
+    ".autosd/provenance/coverage.xml",
+    ".coverage",
 }
 
 IGNORED_ARTIFACT_DIRS = {

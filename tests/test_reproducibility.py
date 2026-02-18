@@ -80,3 +80,19 @@ def test_build_artifact_checksums_ignores_autosd_runtime_logs(tmp_path: Path) ->
     assert ".autosd/prompt_journal.jsonl" not in checksums
     assert ".autosd/provenance/quality_gate_cache.json" not in checksums
     assert ".autosd/provenance/build_manifest.json" in checksums
+
+
+def test_build_artifact_checksums_ignores_coverage_outputs(tmp_path: Path) -> None:
+    (tmp_path / ".autosd" / "provenance").mkdir(parents=True)
+    (tmp_path / ".autosd" / "provenance" / "coverage.xml").write_text(
+        "<coverage/>",
+        encoding="utf-8",
+    )
+    (tmp_path / ".coverage").write_text("binary-ish", encoding="utf-8")
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+
+    checksums = build_artifact_checksums(tmp_path)
+
+    assert ".autosd/provenance/coverage.xml" not in checksums
+    assert ".coverage" not in checksums
+    assert "README.md" in checksums
