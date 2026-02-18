@@ -76,3 +76,22 @@ def test_append_failure_ledger_writes_jsonl(tmp_path: Path, monkeypatch) -> None
     payload = json.loads(lines[0])
     assert payload["run_id"] == "456"
     assert payload["failed_jobs"][0]["job"] == "quality_gates"
+
+
+def test_dashboard_parser_accepts_warning_results(tmp_path: Path) -> None:
+    script = _load_module("scripts/ci/update_failure_dashboard.py")
+    payload_path = tmp_path / "failed-jobs.json"
+    payload_path.write_text(
+        json.dumps(
+            [
+                {"job": "verify_factory", "result": "failure"},
+                {"job": "dashboard_update", "result": "warning"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    items = script._load_failed_jobs_from_file(payload_path)  # noqa: SLF001
+    assert items == [
+        {"job": "verify_factory", "result": "failure"},
+        {"job": "dashboard_update", "result": "warning"},
+    ]

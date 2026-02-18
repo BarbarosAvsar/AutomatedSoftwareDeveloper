@@ -224,7 +224,7 @@ def _parse_args() -> argparse.Namespace:
         "--failed-jobs-json",
         type=Path,
         default=None,
-        help="Path to failed jobs payload written by build_failure_summary.py.",
+        help="Path to failed jobs payload written by CI summary/runner scripts.",
     )
     parser.add_argument(
         "--failed-job",

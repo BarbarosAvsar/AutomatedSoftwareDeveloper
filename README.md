@@ -198,10 +198,16 @@ python -m pytest
 GitHub Actions model:
 
 - `Unified Actions` (`.github/workflows/unified-actions.yml`) is the single authoritative CI workflow.
-- It runs quality gates + factory conformance.
-- Failures are documented in:
-  - local append-only ledger: `.autosd/ci/failure_ledger.jsonl`
-  - persistent GitHub issue: `CI Failure Dashboard` (label `ci-failures`, latest 30 failures)
+- It runs a single sequential CI action (`scripts/ci/run_unified_action.py`) that executes all gates in order.
+- Primary per-run artifact is one unified event file:
+  - `ci-unified-events.jsonl` (all `info`, `warning`, `error`, `critical` lines in one stream)
+- Additional outputs:
+  - `ci-unified-summary.md`
+  - `failed-jobs.json`
+  - `.autosd/ci/failure_ledger.jsonl`
+  - `verify_factory_report.json`
+  - `conformance/report.json`
+- Failed runs are also indexed in persistent GitHub issue: `CI Failure Dashboard` (label `ci-failures`, latest 30 failures)
 
 ## Observability & Logs
 

@@ -30,9 +30,9 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
-  quality_gates:
+  unified_action:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -42,116 +42,45 @@ jobs:
           cache-dependency-path: |
             pyproject.toml
             requirements*.txt
-      - name: Install dependencies
+      - name: Run unified sequential action
+        id: unified_runner
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .[dev,security]
-      - name: Ruff
-        run: python -m ruff check .
-      - name: Mypy
-        run: python -m mypy automated_software_developer
-      - name: Pytest
-        run: python -m pytest
-      - name: Upload AutoSD log
-        if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: autosd-log-quality-gates
-          path: autosd.log
-          if-no-files-found: ignore
-
-  factory_conformance:
-    needs: quality_gates
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: |
-            pyproject.toml
-            requirements*.txt
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .[dev,security]
-      - name: Verify factory conformance
-        run: |
-          autosd verify-factory \
-            --skip-generator-gates \
-            --verify-report-path verify_factory_report.json \
-            --report-path conformance/report.json
-      - name: Upload conformance artifacts
-        if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: conformance-artifacts
-          path: |
-            verify_factory_report.json
-            conformance/report.json
-            conformance/output
-          if-no-files-found: ignore
-
-  failure_summary:
-    if: ${{ always() }}
-    needs: [quality_gates, factory_conformance]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Build failure summary and ledger
-        run: |
-          python scripts/ci/build_failure_summary.py \
-            --summary-path autosd-log-summary.md \
+          set +e
+          python scripts/ci/run_unified_action.py \
+            --events-path ci-unified-events.jsonl \
+            --summary-path ci-unified-summary.md \
             --failed-jobs-path failed-jobs.json \
-            --autosd-log-dir autosd-log-artifacts \
-            --diagnostics-dir unified-error-artifacts \
-            --ledger-path .autosd/ci/failure_ledger.jsonl
+            --ledger-path .autosd/ci/failure_ledger.jsonl \
+            --verify-report-path verify_factory_report.json \
+            --conformance-report-path conformance/report.json
+          exit_code=$?
+          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          exit 0
         env:
-          NEEDS: ${{ toJson(needs) }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_WORKFLOW: ${{ github.workflow }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-      - name: Update CI failure dashboard
-        if: ${{ always() }}
-        run: |
-          python scripts/ci/update_failure_dashboard.py \
-            --failed-jobs-json failed-jobs.json \
-            --max-entries 30
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Upload failure artifacts
+      - name: Upload unified CI artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ci-failure-summary
+          name: unified-ci-artifacts
           path: |
-            autosd-log-summary.md
+            ci-unified-events.jsonl
+            ci-unified-summary.md
             failed-jobs.json
             .autosd/ci/failure_ledger.jsonl
+            verify_factory_report.json
+            conformance/report.json
           if-no-files-found: ignore
-      - name: Fail workflow when required jobs failed
+      - name: Fail workflow when blocking stages failed
         run: |
-          python - <<'PY'
-          import json
-          import os
-
-          needs = json.loads(os.environ["NEEDS"])
-          bad = {
-              name: value.get("result", "unknown")
-              for name, value in needs.items()
-              if value.get("result") not in {"success", "skipped"}
-          }
-          if bad:
-              raise SystemExit(f"Required jobs failed: {bad}")
-          print("All required jobs passed.")
-          PY
-        env:
-          NEEDS: ${{ toJson(needs) }}
+          if [ "${{ steps.unified_runner.outputs.exit_code }}" != "0" ]; then
+            echo "Unified sequential action failed with exit code ${{ steps.unified_runner.outputs.exit_code }}."
+            exit 1
+          fi
+          echo "Unified sequential action passed."

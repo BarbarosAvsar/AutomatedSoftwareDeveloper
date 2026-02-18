@@ -18,15 +18,17 @@ publishes the JSON schema for pipeline events and statuses.
 
 ## CI Pipeline
 
-1. **Quality Gates** -> ruff, mypy, pytest
-2. **Factory Conformance** -> `autosd verify-factory --skip-generator-gates`
-3. **Failure Summary** -> unified summary, append-only ledger, dashboard update
+1. **Unified Sequential Action** -> install/update tooling, install deps, `autosd verify-factory`
+2. **Unified Event Stream** -> `ci-unified-events.jsonl` captures all info/warning/error/critical lines
+3. **Failure Indexing** -> `failed-jobs.json`, append-only ledger, dashboard update
 
 Execution notes:
 
 - `.github/workflows/unified-actions.yml` is the authoritative CI executor.
 - `.github/workflows/unified-actions.yml` is the only workflow file used for CI execution.
+- CI logic is executed by one sequential runner script: `scripts/ci/run_unified_action.py`.
 - Failed workflow runs are documented in:
+  - unified run artifact: `ci-unified-events.jsonl`
   - local append-only ledger: `.autosd/ci/failure_ledger.jsonl`
   - persistent issue: `CI Failure Dashboard` (`ci-failures` label, latest 30 failures)
 

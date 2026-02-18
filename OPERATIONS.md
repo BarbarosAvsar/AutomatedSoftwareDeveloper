@@ -135,16 +135,19 @@ Use `--verbose` for additional debug logging in `autosd.log`.
 
 ### CI Troubleshooting
 
-- Run the same CI entrypoint locally:
-  - `python ci/run_ci.py`
-  - or `./ci/run_ci.sh`
+- Run the same unified sequential CI action locally:
+  - `python scripts/ci/run_unified_action.py`
 - Lint workflows locally:
   - `autosd ci lint-workflows`
-- If CI mirror fails, inspect `verify_factory_report.json` for the failing gate.
+- If CI fails, inspect artifacts in this order:
+  - `ci-unified-events.jsonl` (single source of truth for all log levels)
+  - `ci-unified-summary.md`
+  - `failed-jobs.json`
+  - `verify_factory_report.json`
 - Use the `CI Failure Dashboard` issue (label `ci-failures`) as the single-click failure index
   across workflows. The dashboard keeps the latest 30 failed runs with links and failed-job names.
 - Use `.autosd/ci/failure_ledger.jsonl` for local append-only failure history.
-- `Unified Actions` is the only CI workflow and the source of truth for CI status.
+- `Unified Actions` is the only CI workflow and runs one sequential action in one job.
 
 ## Planning-First Execution Modes
 
