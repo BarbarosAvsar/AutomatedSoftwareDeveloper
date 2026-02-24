@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from automated_software_developer.agent.conformance.fixtures import load_fixtures
@@ -35,6 +36,21 @@ def _parse_args() -> argparse.Namespace:
         help="OpenAI model id for smoke checks.",
     )
     parser.add_argument(
+        "--smoke-fixtures",
+        default="cli_tool,api_service,web_app",
+        help="Comma-separated fixture ids for smoke checks.",
+    )
+    parser.add_argument(
+        "--required",
+        action="store_true",
+        help="Treat missing provider prerequisites and failed checks as blocking.",
+    )
+    parser.add_argument(
+        "--advisory",
+        action="store_true",
+        help="Treat failed checks as advisory (non-blocking).",
+    )
+    parser.add_argument(
         "--strict-readiness",
         action="store_true",
         help="Enable strict readiness checks for generated projects.",
@@ -44,10 +60,18 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
-    fixtures = [item for item in load_fixtures() if item.fixture_id in SMOKE_FIXTURE_IDS]
+    required = args.required or not args.advisory
+    fixture_ids = _parse_fixture_ids(args.smoke_fixtures)
+    fixtures = [item for item in load_fixtures() if item.fixture_id in fixture_ids]
     if not fixtures:
         print("No smoke fixtures found.")
         return 1
+    if required and not os.environ.get("OPENAI_API_KEY"):
+        print("OPENAI_API_KEY is required for real-provider smoke checks.")
+        return 1
+    if not os.environ.get("OPENAI_API_KEY"):
+        print("OPENAI_API_KEY missing; skipping real-provider smoke checks (advisory mode).")
+        return 0
     report = run_conformance_suite(
         fixtures=fixtures,
         config=ConformanceConfig(
@@ -62,8 +86,19 @@ def main() -> int:
         ),
     )
     payload = report.to_dict()
+    payload["fixtures_requested"] = fixture_ids
+    payload["required"] = required
     print(json.dumps(payload, indent=2))
-    return 0 if report.passed else 1
+    if report.passed or not required:
+        return 0
+    return 1
+
+
+def _parse_fixture_ids(raw_value: str) -> tuple[str, ...]:
+    """Parse and normalize smoke fixture ids from comma-separated input."""
+    items = [item.strip() for item in raw_value.split(",")]
+    normalized = tuple(item for item in items if item)
+    return normalized or SMOKE_FIXTURE_IDS
 
 
 if __name__ == "__main__":

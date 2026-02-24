@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 # mypy: ignore-errors
 # ruff: noqa: B008,F403,F405,I001
 from automated_software_developer.commands.common import *
@@ -257,6 +259,9 @@ def run(
     table.add_row("Readiness Level", summary.readiness_level)
     if summary.blocking_reasons:
         table.add_row("Blocking Reasons", "; ".join(summary.blocking_reasons))
+    table.add_row("Validation Provider", summary.validation_provider)
+    if summary.validation_scope:
+        table.add_row("Validation Scope", ", ".join(summary.validation_scope))
     if summary.refined_spec_path is not None:
         table.add_row("Refined Spec", str(summary.refined_spec_path))
     if summary.backlog_path is not None:
@@ -367,23 +372,75 @@ def verify_factory(
             ),
         ),
     ] = False,
+    conformance_provider: Annotated[
+        str,
+        typer.Option(
+            "--conformance-provider",
+            help="Conformance provider: mock or openai.",
+        ),
+    ] = "mock",
+    real_provider_required: Annotated[
+        bool,
+        typer.Option(
+            "--real-provider-required/--real-provider-advisory",
+            help=(
+                "When using --conformance-provider openai, treat failures as blocking "
+                "(required) or non-blocking (advisory)."
+            ),
+        ),
+    ] = False,
+    real_provider_model: Annotated[
+        str,
+        typer.Option(
+            "--real-provider-model",
+            help="OpenAI model used when --conformance-provider openai.",
+        ),
+    ] = "gpt-5.3-codex",
+    smoke_fixtures: Annotated[
+        str | None,
+        typer.Option(
+            "--smoke-fixtures",
+            help=(
+                "Optional comma-separated fixture IDs. "
+                "Defaults to cli_tool,api_service,web_app when provider=openai."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Run generator and generated-project quality gates for release readiness."""
+    provider_mode = conformance_provider.strip().lower()
+    if provider_mode not in {"mock", "openai"}:
+        raise typer.BadParameter("--conformance-provider must be one of: mock, openai")
     conformance_seed = _ensure_positive(conformance_seed, "conformance-seed")
     max_workers = _ensure_positive(max_workers, "max-workers")
     if strict_readiness:
         _enforce_strict_readiness(
-            provider="mock",
+            provider=provider_mode,
             quality_gates=True,
             enable_security_scan=True,
             security_scan_mode="required",
         )
+    default_smoke_fixture_ids = ("cli_tool", "api_service", "web_app")
+    fixture_filter_raw = smoke_fixtures
+    if fixture_filter_raw is None and provider_mode == "openai":
+        fixture_filter_raw = ",".join(default_smoke_fixture_ids)
+    selected_fixture_ids = _parse_fixture_ids_csv(fixture_filter_raw)
+
     verify_report: dict[str, Any] = {
         "timestamp": datetime.now(tz=UTC).isoformat(),
         "generator_gates": [],
         "workflow_lint": {},
         "ci_mirror": {},
         "conformance": {},
+        "real_provider": {
+            "enabled": provider_mode == "openai",
+            "required": provider_mode == "openai" and real_provider_required,
+            "provider": provider_mode if provider_mode == "openai" else None,
+            "model": real_provider_model if provider_mode == "openai" else None,
+            "fixtures_run": [],
+            "pass_rate": 0.0,
+            "blocking_failures": [],
+        },
     }
     if not skip_generator_gates:
         gates = generator_gate_commands()
@@ -427,26 +484,114 @@ def verify_factory(
         raise typer.Exit(code=1)
     console.print("[PASS] CI mirror passed.")
 
+    fixtures = _resolve_conformance_fixtures(selected_fixture_ids)
+    if provider_mode == "openai" and not os.environ.get("OPENAI_API_KEY"):
+        key_message = (
+            "OPENAI_API_KEY is missing; real-provider conformance cannot run."
+        )
+        verify_report["real_provider"]["blocking_failures"] = [key_message]
+        verify_report["conformance"] = {
+            "passed": False,
+            "skipped": True,
+            "report_path": str(report_path),
+            "output_dir": str(output_dir),
+            "provider": provider_mode,
+            "model": real_provider_model,
+            "fixtures_run": [fixture.fixture_id for fixture in fixtures],
+            "pass_rate": 0.0,
+            "blocking_failures": [key_message],
+        }
+        if real_provider_required:
+            console.print(f"[FAIL] {key_message}")
+            _write_verify_report(verify_report_path, verify_report)
+            raise typer.Exit(code=1)
+        console.print(f"[WARN] {key_message} Advisory mode allows continuation.")
+        _write_verify_report(verify_report_path, verify_report)
+        return
+
     report = run_conformance_suite(
+        fixtures=fixtures,
         config=ConformanceConfig(
             output_dir=output_dir,
             report_path=report_path,
+            provider=provider_mode,
+            model=real_provider_model,
             conformance_seed=conformance_seed,
             diff_check=diff_check,
             max_workers=max_workers,
             strict_readiness=strict_readiness,
         )
     )
+    fixture_ids_run = [item.fixture_id for item in report.fixtures]
+    blocking_failures = _conformance_blocking_failures(report)
     status = "PASS" if report.passed else "FAIL"
     console.print(f"[{status}] Conformance suite complete. Report: {report_path}")
     verify_report["conformance"] = {
         "passed": report.passed,
         "report_path": str(report_path),
         "output_dir": str(output_dir),
+        "provider": provider_mode,
+        "model": real_provider_model if provider_mode == "openai" else None,
+        "fixtures_run": fixture_ids_run,
+        "pass_rate": round(report.pass_rate, 4),
+        "blocking_failures": blocking_failures,
     }
+    if provider_mode == "openai":
+        verify_report["real_provider"] = {
+            "enabled": True,
+            "required": real_provider_required,
+            "provider": provider_mode,
+            "model": real_provider_model,
+            "fixtures_run": fixture_ids_run,
+            "pass_rate": round(report.pass_rate, 4),
+            "blocking_failures": blocking_failures,
+        }
     _write_verify_report(verify_report_path, verify_report)
-    if not report.passed:
+    if not report.passed and (provider_mode != "openai" or real_provider_required):
         raise typer.Exit(code=1)
+    if not report.passed and provider_mode == "openai":
+        console.print("[WARN] Real-provider conformance failed in advisory mode.")
+
+
+def _parse_fixture_ids_csv(raw_value: str | None) -> list[str]:
+    """Parse optional comma-separated fixture ids into normalized list."""
+    if raw_value is None:
+        return []
+    items = [item.strip() for item in raw_value.split(",")]
+    return [item for item in items if item]
+
+
+def _resolve_conformance_fixtures(fixture_ids: list[str]) -> list[Any]:
+    """Load fixtures and optionally filter by fixture id."""
+    from automated_software_developer.agent.conformance.fixtures import load_fixtures
+
+    fixtures = load_fixtures()
+    if not fixture_ids:
+        return fixtures
+    fixture_index = {item.fixture_id: item for item in fixtures}
+    unknown = [item for item in fixture_ids if item not in fixture_index]
+    if unknown:
+        allowed = ", ".join(sorted(fixture_index))
+        raise typer.BadParameter(
+            f"Unknown smoke fixture(s): {', '.join(sorted(set(unknown)))}. Allowed: {allowed}"
+        )
+    return [fixture_index[item] for item in fixture_ids]
+
+
+def _conformance_blocking_failures(report: Any) -> list[str]:
+    """Build deterministic fixture/gate failure summaries."""
+    failures: list[str] = []
+    for fixture in report.fixtures:
+        if fixture.passed:
+            continue
+        failing_gates = [gate.name for gate in fixture.gates if not gate.passed]
+        if fixture.diff is not None and not fixture.diff.matched:
+            failing_gates.append("diff_check")
+        if failing_gates:
+            failures.append(f"{fixture.fixture_id}: {', '.join(sorted(set(failing_gates)))}")
+        else:
+            failures.append(f"{fixture.fixture_id}: unknown_failure")
+    return failures
 
 
 @app.command("doctor")

@@ -100,10 +100,10 @@ def _is_truthy(value: str | None) -> bool:
 
 def _real_provider_smoke_enabled() -> bool:
     explicit = os.environ.get("AUTOSD_CI_REAL_PROVIDER_SMOKE")
-    if _is_truthy(explicit):
-        return True
+    if explicit is not None:
+        return _is_truthy(explicit)
     event_name = os.environ.get("GITHUB_EVENT_NAME", "").strip().lower()
-    return event_name == "schedule" and bool(os.environ.get("OPENAI_API_KEY"))
+    return event_name in {"pull_request", "schedule"}
 
 
 def _real_provider_smoke_blocking() -> bool:
@@ -111,7 +111,17 @@ def _real_provider_smoke_blocking() -> bool:
     if explicit is not None:
         return _is_truthy(explicit)
     event_name = os.environ.get("GITHUB_EVENT_NAME", "").strip().lower()
-    return event_name == "schedule"
+    return event_name in {"pull_request", "schedule"}
+
+
+def _real_provider_model() -> str:
+    model = os.environ.get("AUTOSD_CI_REAL_PROVIDER_MODEL", "").strip()
+    return model or "gpt-5.3-codex"
+
+
+def _real_provider_smoke_fixtures() -> str:
+    raw = os.environ.get("AUTOSD_CI_REAL_PROVIDER_FIXTURES", "").strip()
+    return raw or "cli_tool,api_service,web_app"
 
 
 def _collect_secret_values() -> list[str]:
@@ -368,6 +378,116 @@ def _write_summary(path: Path, results: list[StageResult]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _load_json_file(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return payload
+
+
+def _fixture_failure_reasons(payload: dict[str, Any]) -> list[str]:
+    fixtures = payload.get("fixtures")
+    if not isinstance(fixtures, list):
+        return []
+    failures: list[str] = []
+    for fixture in fixtures:
+        if not isinstance(fixture, dict):
+            continue
+        if bool(fixture.get("passed")):
+            continue
+        fixture_id = str(fixture.get("fixture_id", "unknown_fixture"))
+        gate_names: list[str] = []
+        gates = fixture.get("gates")
+        if isinstance(gates, list):
+            for gate in gates:
+                if not isinstance(gate, dict):
+                    continue
+                if bool(gate.get("passed")):
+                    continue
+                gate_name = str(gate.get("name", "unknown_gate"))
+                gate_names.append(gate_name)
+        diff = fixture.get("diff")
+        if isinstance(diff, dict) and not bool(diff.get("matched", True)):
+            gate_names.append("diff_check")
+        if gate_names:
+            failures.append(f"{fixture_id}: {', '.join(sorted(set(gate_names)))}")
+        else:
+            failures.append(f"{fixture_id}: unknown_failure")
+    return failures
+
+
+def _merge_real_provider_into_verify_report(
+    *,
+    verify_report_path: Path,
+    real_provider_report_path: Path,
+    required: bool,
+    provider: str,
+    model: str,
+    stage_result: StageResult,
+) -> None:
+    verify_payload = _load_json_file(verify_report_path)
+    real_payload = _load_json_file(real_provider_report_path)
+    fixtures_run: list[str] = []
+    pass_rate = 0.0
+    blocking_failures: list[str] = []
+    report_passed = stage_result.exit_code == 0
+
+    fixtures = real_payload.get("fixtures")
+    if isinstance(fixtures, list):
+        fixture_payloads = [item for item in fixtures if isinstance(item, dict)]
+        fixtures_run = [
+            str(item.get("fixture_id"))
+            for item in fixture_payloads
+            if isinstance(item.get("fixture_id"), str)
+        ]
+        if fixture_payloads:
+            passed_count = sum(1 for item in fixture_payloads if bool(item.get("passed")))
+            pass_rate = passed_count / len(fixture_payloads)
+        blocking_failures = _fixture_failure_reasons(real_payload)
+        report_passed = bool(real_payload.get("passed")) and stage_result.exit_code == 0
+    elif stage_result.exit_code != 0:
+        blocking_failures = [
+            (
+                "real_provider_smoke stage failed with "
+                f"exit code {stage_result.exit_code}"
+            )
+        ]
+    elif real_payload:
+        blocking_failures = ["real_provider_smoke report schema invalid"]
+
+    if required and stage_result.exit_code != 0 and not blocking_failures:
+        blocking_failures = [
+            f"real_provider_smoke required stage failed ({stage_result.exit_code})"
+        ]
+
+    verify_payload["real_provider"] = {
+        "enabled": True,
+        "required": required,
+        "provider": provider,
+        "model": model,
+        "fixtures_run": fixtures_run,
+        "pass_rate": round(pass_rate, 4),
+        "blocking_failures": blocking_failures,
+        "passed": report_passed,
+        "report_path": str(real_provider_report_path),
+    }
+    verify_payload.setdefault("conformance", {})
+    conformance_section = verify_payload.get("conformance")
+    if isinstance(conformance_section, dict):
+        conformance_section["real_provider_report_path"] = str(real_provider_report_path)
+        conformance_section["real_provider_passed"] = report_passed
+        conformance_section["real_provider_pass_rate"] = round(pass_rate, 4)
+        verify_payload["conformance"] = conformance_section
+
+    verify_report_path.parent.mkdir(parents=True, exist_ok=True)
+    verify_report_path.write_text(json.dumps(verify_payload, indent=2), encoding="utf-8")
+
+
 def _fallback_append_failure_ledger(*, failed_jobs: dict[str, str], ledger_path: Path) -> None:
     if not failed_jobs:
         return
@@ -429,6 +549,8 @@ def run_unified_action(
     secret_values = _collect_secret_values()
     events = EventStream(events_path, secret_values=secret_values)
     results: list[StageResult] = []
+    real_provider_report_path = conformance_report_path.with_name("report-real-provider.json")
+    real_provider_required = _real_provider_smoke_blocking()
     configured_stages = stages or [
         StageConfig(
             name="install_pip",
@@ -467,26 +589,46 @@ def run_unified_action(
         ),
     ]
     if stages is None and _real_provider_smoke_enabled():
-        smoke_command: tuple[str, ...] = (
+        smoke_command: list[str] = [
             sys.executable,
             "scripts/ci/run_real_provider_smoke.py",
             "--output-dir",
             "conformance/output-real-provider",
             "--report-path",
-            "conformance/report-real-provider.json",
+            str(real_provider_report_path),
+            "--smoke-fixtures",
+            _real_provider_smoke_fixtures(),
+            "--model",
+            _real_provider_model(),
             "--strict-readiness",
-        )
+        ]
+        smoke_command.append("--required" if real_provider_required else "--advisory")
         configured_stages.append(
             StageConfig(
                 name="real_provider_smoke",
-                command=smoke_command,
-                blocking=_real_provider_smoke_blocking(),
+                command=tuple(smoke_command),
+                blocking=real_provider_required,
             )
         )
 
     try:
         for stage in configured_stages:
             results.append(_run_stage(stage, events, secret_values))
+
+        if stages is None:
+            real_provider_stage = next(
+                (item for item in results if item.name == "real_provider_smoke"),
+                None,
+            )
+            if real_provider_stage is not None:
+                _merge_real_provider_into_verify_report(
+                    verify_report_path=verify_report_path,
+                    real_provider_report_path=real_provider_report_path,
+                    required=real_provider_required,
+                    provider="openai",
+                    model=_real_provider_model(),
+                    stage_result=real_provider_stage,
+                )
 
         if update_dashboard and any(result.exit_code != 0 for result in results):
             dashboard_stage = StageConfig(

@@ -57,4 +57,6 @@ def test_auto_mode_runs_planning_only(tmp_path: Path) -> None:
     assert summary.verification_results == []
     assert summary.readiness_level == "planning_only"
     assert any("planning_only_mode" in reason for reason in summary.blocking_reasons)
+    assert summary.validation_provider == "mock"
+    assert summary.validation_scope == ["planning_only"]
     assert (tmp_path / ".autosd" / "sprints").exists()

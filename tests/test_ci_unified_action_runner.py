@@ -160,3 +160,74 @@ def test_unified_workflow_single_job_and_runner_invocation() -> None:
     assert "factory_conformance:" not in workflow
     assert "failure_summary:" not in workflow
     assert "python scripts/ci/run_unified_action.py" in workflow
+
+
+def test_real_provider_smoke_enablement_defaults(monkeypatch) -> None:
+    script = _load_module("scripts/ci/run_unified_action.py")
+    monkeypatch.delenv("AUTOSD_CI_REAL_PROVIDER_SMOKE", raising=False)
+
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    assert script._real_provider_smoke_enabled() is True
+    assert script._real_provider_smoke_blocking() is True
+
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "schedule")
+    assert script._real_provider_smoke_enabled() is True
+    assert script._real_provider_smoke_blocking() is True
+
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    assert script._real_provider_smoke_enabled() is False
+    assert script._real_provider_smoke_blocking() is False
+
+
+def test_merge_real_provider_results_into_verify_report(tmp_path: Path) -> None:
+    script = _load_module("scripts/ci/run_unified_action.py")
+    verify_report_path = tmp_path / "verify_factory_report.json"
+    verify_report_path.write_text(
+        json.dumps({"conformance": {"passed": True}}, indent=2),
+        encoding="utf-8",
+    )
+    real_report_path = tmp_path / "conformance" / "report-real-provider.json"
+    real_report_path.parent.mkdir(parents=True, exist_ok=True)
+    real_report_path.write_text(
+        json.dumps(
+            {
+                "passed": False,
+                "fixtures": [
+                    {
+                        "fixture_id": "cli_tool",
+                        "passed": True,
+                        "gates": [{"name": "ci_entrypoint", "passed": True}],
+                    },
+                    {
+                        "fixture_id": "api_service",
+                        "passed": False,
+                        "gates": [{"name": "api_contract_smoke", "passed": False}],
+                    },
+                ],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    stage = script.StageResult(
+        name="real_provider_smoke",
+        command="python scripts/ci/run_real_provider_smoke.py",
+        exit_code=1,
+        blocking=True,
+        duration_seconds=3.2,
+    )
+    script._merge_real_provider_into_verify_report(
+        verify_report_path=verify_report_path,
+        real_provider_report_path=real_report_path,
+        required=True,
+        provider="openai",
+        model="gpt-5.3-codex",
+        stage_result=stage,
+    )
+    payload = json.loads(verify_report_path.read_text(encoding="utf-8"))
+    assert payload["real_provider"]["enabled"] is True
+    assert payload["real_provider"]["required"] is True
+    assert payload["real_provider"]["provider"] == "openai"
+    assert payload["real_provider"]["fixtures_run"] == ["cli_tool", "api_service"]
+    assert payload["real_provider"]["pass_rate"] == 0.5
+    assert "api_service" in payload["real_provider"]["blocking_failures"][0]

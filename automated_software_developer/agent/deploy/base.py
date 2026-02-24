@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import subprocess  # nosec B404
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -99,6 +101,8 @@ class DeploymentOrchestrator:
         target: str,
         strategy: str,
         execute: bool,
+        health_check_command: str | None = None,
+        health_timeout_seconds: int = 120,
     ) -> DeploymentResult:
         """Deploy one project to selected target/environment."""
         LOGGER.info(
@@ -109,12 +113,29 @@ class DeploymentOrchestrator:
                 "target": target,
                 "strategy": strategy,
                 "execute": execute,
+                "health_check_command": bool(health_check_command),
+                "health_timeout_seconds": health_timeout_seconds,
             },
         )
         entry = _require_project(self.registry, project_ref)
         deployment_target = _require_target(self.targets, target)
         resolved_strategy = _normalize_strategy(strategy, deployment_target.supports_canary)
         project_dir = _resolve_project_dir(entry)
+        if execute and not health_check_command:
+            return DeploymentResult(
+                project_id=entry.project_id,
+                environment=environment,
+                target=target,
+                success=False,
+                version=entry.current_version,
+                message=(
+                    "Execute mode requires an explicit health check command. "
+                    "Provide --health-check-command '<cmd>' and --health-timeout-seconds."
+                ),
+                deployed_at=utc_now(),
+                strategy=resolved_strategy,
+                scaffold_only=False,
+            )
         result = deployment_target.deploy(
             project_dir=project_dir,
             environment=environment,
@@ -123,6 +144,34 @@ class DeploymentOrchestrator:
             execute=execute,
         )
         result = _with_project_id(result, entry.project_id)
+        if execute and result.success and health_check_command:
+            health_ok, health_message = _run_health_check(
+                command=health_check_command,
+                cwd=project_dir,
+                timeout_seconds=health_timeout_seconds,
+            )
+            if not health_ok:
+                rollback_result = deployment_target.rollback(
+                    project_dir=project_dir,
+                    environment=environment,
+                    version=entry.current_version,
+                    execute=False,
+                )
+                rollback_result = _with_project_id(rollback_result, entry.project_id)
+                result = DeploymentResult(
+                    project_id=entry.project_id,
+                    environment=environment,
+                    target=target,
+                    success=False,
+                    version=entry.current_version,
+                    message=(
+                        f"{health_message} "
+                        f"Rollback evidence recorded: {rollback_result.message}"
+                    ),
+                    deployed_at=utc_now(),
+                    strategy=resolved_strategy,
+                    scaffold_only=False,
+                )
         if result.success:
             environments = list(entry.environments)
             if environment not in environments:
@@ -344,3 +393,43 @@ def _with_project_id(result: DeploymentResult, project_id: str) -> DeploymentRes
         strategy=result.strategy,
         scaffold_only=result.scaffold_only,
     )
+
+
+def _run_health_check(
+    *,
+    command: str,
+    cwd: Path,
+    timeout_seconds: int,
+) -> tuple[bool, str]:
+    """Execute health check command and return pass/fail with diagnostics."""
+    if timeout_seconds <= 0:
+        return False, "Health check timeout must be greater than zero."
+    command_args = (
+        ["powershell", "-NoProfile", "-Command", command]
+        if os.name == "nt"
+        else ["bash", "-lc", command]
+    )
+    try:
+        completed = subprocess.run(
+            command_args,
+            cwd=str(cwd),
+            check=False,
+            text=True,
+            capture_output=True,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"Health check timed out after {timeout_seconds} seconds."
+    except OSError as exc:
+        return False, f"Health check command failed to start: {exc}"
+    if completed.returncode == 0:
+        return True, "Health check passed."
+    stdout = (completed.stdout or "").strip()
+    stderr = (completed.stderr or "").strip()
+    details = []
+    if stdout:
+        details.append(f"stdout={stdout[-500:]}")
+    if stderr:
+        details.append(f"stderr={stderr[-500:]}")
+    detail_text = f" ({'; '.join(details)})" if details else ""
+    return False, f"Health check failed with exit code {completed.returncode}{detail_text}"

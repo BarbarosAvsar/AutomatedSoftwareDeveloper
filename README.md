@@ -7,7 +7,9 @@ Autonomous software-factory agent for requirements refinement, planning, impleme
 1) Install:
 
 ```bash
-python -m pip install -r requirements-dev.lock -e .
+python -m pip install -e .[dev,security]
+# Optional pinned toolchain:
+# python -m pip install -r requirements-dev.lock -e .
 ```
 
 2) Run an end-to-end workflow:
@@ -66,13 +68,13 @@ Planning mode stages:
 ## Installation
 
 ```bash
-python -m pip install -r requirements-dev.lock -e .
+python -m pip install -e .[dev,security]
 ```
 
-Optional security extras:
+Optional pinned local mirror of CI toolchain:
 
 ```bash
-python -m pip install -e .[security]
+python -m pip install -r requirements-dev.lock -e .
 ```
 
 ## Core Commands
@@ -105,6 +107,8 @@ Useful `run` flags:
 ```bash
 autosd verify-factory
 autosd verify-factory --strict-readiness
+autosd verify-factory --conformance-provider openai --real-provider-required \
+  --real-provider-model gpt-5.3-codex --smoke-fixtures cli_tool,api_service,web_app
 ```
 
 Runs repository quality gates, workflow lint, CI mirror execution, and conformance suite. Produces `conformance/report.json` and `verify_factory_report.json`.
@@ -150,6 +154,8 @@ autosd patch-all --domain commerce --needs-upgrade --reason "dependency refresh"
 
 ```bash
 autosd deploy --project <id> --env staging --target generic_container
+autosd deploy --project <id> --env staging --target generic_container --execute \
+  --health-check-command "python -m pytest -q tests/smoke" --health-timeout-seconds 180
 autosd rollback --project <id> --env staging --target generic_container
 autosd promote --project <id> --from staging --to prod --target generic_container
 ```
@@ -217,7 +223,7 @@ GitHub Actions model:
   - `.autosd/ci/failure_ledger.jsonl`
   - `verify_factory_report.json`
   - `conformance/report.json`
-  - `conformance/report-real-provider.json` (nightly real-provider smoke, when configured)
+  - `conformance/report-real-provider.json` (blocking real-provider smoke on PR + nightly)
 - Failed runs are also indexed in persistent GitHub issue: `CI Failure Dashboard` (label `ci-failures`, latest 30 failures)
 
 ## Observability & Logs

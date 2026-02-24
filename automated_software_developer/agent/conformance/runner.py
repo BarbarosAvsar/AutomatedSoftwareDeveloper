@@ -9,7 +9,7 @@ import sys
 import time
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from shutil import which
 
@@ -44,6 +44,7 @@ class ConformanceConfig:
     diff_check: bool = True
     max_workers: int = 3
     strict_readiness: bool = False
+    max_flaky_retries: int = 0
 
 
 def run_conformance_suite(
@@ -62,6 +63,8 @@ def run_conformance_suite(
     )
     if cfg.max_workers <= 0:
         raise ValueError("max_workers must be greater than zero.")
+    if cfg.max_flaky_retries < 0:
+        raise ValueError("max_flaky_retries must be non-negative.")
     cfg.output_dir.mkdir(parents=True, exist_ok=True)
 
     builder, _ = ConformanceReport.start()
@@ -77,7 +80,22 @@ def run_conformance_suite(
 
 def _run_fixture(fixture: ConformanceFixture, cfg: ConformanceConfig) -> FixtureResult:
     """Execute a single fixture run and gather results."""
-    output_dir = cfg.output_dir / fixture.fixture_id
+    attempt = 0
+    while True:
+        result = _run_fixture_attempt(fixture=fixture, cfg=cfg, attempt=attempt)
+        if result.passed or attempt >= cfg.max_flaky_retries:
+            return replace(result, flaky_retries=attempt)
+        attempt += 1
+
+
+def _run_fixture_attempt(
+    *,
+    fixture: ConformanceFixture,
+    cfg: ConformanceConfig,
+    attempt: int,
+) -> FixtureResult:
+    """Execute one fixture attempt and gather gate outcomes."""
+    output_dir = cfg.output_dir / fixture.fixture_id / f"attempt-{attempt + 1}"
     run1_dir = output_dir / "run-1"
     run2_dir = output_dir / "run-2"
     for target in (run1_dir, run2_dir):
@@ -104,6 +122,7 @@ def _run_fixture(fixture: ConformanceFixture, cfg: ConformanceConfig) -> Fixture
     adapter_id = _resolve_adapter_id(run1_dir, fixture.expected_adapter_id)
     gates.extend(_validate_project_files(run1_dir, fixture, adapter_id))
     gates.append(_validate_workflow_gate(run1_dir))
+    gates.extend(_adapter_behavioral_gates(run1_dir, adapter_id))
 
     diff_result: DiffResult | None = None
     if cfg.diff_check:
@@ -155,6 +174,7 @@ def _generate_project(
     agent = SoftwareDevelopmentAgent(provider=provider, config=config)
 
     start = time.monotonic()
+    command = f"autosd run ({cfg.provider})"
     try:
         agent.run(requirements=requirements_text, output_dir=output_dir)
     except Exception as exc:  # noqa: BLE001
@@ -162,7 +182,7 @@ def _generate_project(
         return GateResult(
             name="generate_project",
             passed=False,
-            command="autosd run (mock)",
+            command=command,
             exit_code=1,
             duration_seconds=duration,
             stderr=str(exc),
@@ -172,7 +192,7 @@ def _generate_project(
     return GateResult(
         name="generate_project",
         passed=True,
-        command="autosd run (mock)",
+        command=command,
         exit_code=0,
         duration_seconds=duration,
     )
@@ -260,6 +280,121 @@ def _adapter_gate(project_dir: Path, adapter_id: str) -> GateResult:
         passed=not missing,
         notes=missing,
     )
+
+
+def _adapter_behavioral_gates(project_dir: Path, adapter_id: str) -> list[GateResult]:
+    """Run adapter-aware behavioral smoke checks."""
+    if adapter_id == "api_service":
+        return [
+            _run_command(
+                "api_contract_smoke",
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import json\n"
+                        "import sys\n"
+                        "from pathlib import Path\n"
+                        "src = Path('src')\n"
+                        "apps = sorted(src.glob('*/app.py'))\n"
+                        "assert apps, 'expected src/*/app.py'\n"
+                        "pkg = apps[0].parent.name\n"
+                        "sys.path.insert(0, str(src))\n"
+                        "module = __import__(f'{pkg}.app', fromlist=['get_status'])\n"
+                        "status = getattr(module, 'get_status')()\n"
+                        "assert isinstance(status, str) and status.strip(), (\n"
+                        "    'get_status() must return a non-empty string'\n"
+                        ")\n"
+                        "try:\n"
+                        "    getattr(module, 'get_status')('invalid')\n"
+                        "except TypeError:\n"
+                        "    pass\n"
+                        "else:\n"
+                        "    raise AssertionError('get_status should reject invalid args')\n"
+                        "spec = Path('api/openapi.json')\n"
+                        "if spec.exists():\n"
+                        "    json.loads(spec.read_text(encoding='utf-8'))\n"
+                    ),
+                ],
+                project_dir,
+            )
+        ]
+    if adapter_id == "web_app":
+        return [
+            _run_command(
+                "web_ui_smoke",
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "from pathlib import Path; "
+                        "index=Path('frontend/index.html'); "
+                        "assert index.exists(), 'frontend/index.html missing'; "
+                        "text=index.read_text(encoding='utf-8').lower(); "
+                        "assert '<html' in text and '</html>' in text, 'html root missing'; "
+                        "assert '<h1' in text, 'heading missing'; "
+                        "assert 'lang=' in text, 'lang attribute missing'; "
+                        "assert '<title>' in text, 'title missing'"
+                    ),
+                ],
+                project_dir,
+            )
+        ]
+    if adapter_id == "cli_tool":
+        return [
+            _run_command(
+                "cli_behavior_smoke",
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import os\n"
+                        "import subprocess\n"
+                        "import sys\n"
+                        "from pathlib import Path\n"
+                        "src = Path('src')\n"
+                        "sys.path.insert(0, str(src))\n"
+                        "cli_modules = sorted(src.glob('*/cli.py'))\n"
+                        "if cli_modules:\n"
+                        "    pkg = cli_modules[0].parent.name\n"
+                        "    module = __import__(f'{pkg}.cli', fromlist=['run_cli'])\n"
+                        "    run_cli = getattr(module, 'run_cli')\n"
+                        "    output = run_cli([])\n"
+                        "    assert isinstance(output, str) and output.strip(), (\n"
+                        "        'run_cli([]) must return non-empty string'\n"
+                        "    )\n"
+                        "    env = dict(os.environ)\n"
+                        "    current = env.get('PYTHONPATH', '')\n"
+                        "    env['PYTHONPATH'] = (\n"
+                        "        f'{src}{os.pathsep}{current}' if current else str(src)\n"
+                        "    )\n"
+                        "    check = subprocess.run(\n"
+                        "        [sys.executable, '-m', f'{pkg}.cli', '--autosd-invalid-flag'],\n"
+                        "        capture_output=True,\n"
+                        "        text=True,\n"
+                        "        env=env,\n"
+                        "        check=False,\n"
+                        "    )\n"
+                        "    assert check.returncode != 0, (\n"
+                        "        'CLI should fail unknown flags'\n"
+                        "    )\n"
+                        "else:\n"
+                        "    mains = sorted(src.glob('*/main.py'))\n"
+                        "    assert mains, 'expected src/*/cli.py or src/*/main.py'\n"
+                        "    pkg = mains[0].parent.name\n"
+                        "    module = __import__(f'{pkg}.main', fromlist=['render_message'])\n"
+                        "    renderer = getattr(module, 'render_message', None)\n"
+                        "    assert callable(renderer), 'render_message missing'\n"
+                        "    output = renderer([])\n"
+                        "    assert isinstance(output, str) and output.strip(), (\n"
+                        "        'render_message([]) must return non-empty string'\n"
+                        "    )\n"
+                    ),
+                ],
+                project_dir,
+            )
+        ]
+    return []
 
 
 def _validate_workflow_gate(project_dir: Path) -> GateResult:

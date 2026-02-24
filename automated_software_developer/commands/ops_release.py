@@ -288,6 +288,23 @@ def deploy_project(
             help="Run target commands when possible; default is scaffold-only.",
         ),
     ] = False,
+    health_check_command: Annotated[
+        str | None,
+        typer.Option(
+            "--health-check-command",
+            help=(
+                "Required with --execute. Command that must pass after deploy; "
+                "failure triggers rollback marker and non-zero exit."
+            ),
+        ),
+    ] = None,
+    health_timeout_seconds: Annotated[
+        int,
+        typer.Option(
+            "--health-timeout-seconds",
+            help="Timeout in seconds for post-deploy health check command.",
+        ),
+    ] = 120,
     registry_path: Annotated[
         Path | None,
         typer.Option(help="Optional registry JSONL path override."),
@@ -349,6 +366,19 @@ def deploy_project(
             f"Confirm production deploy for '{entry.project_id}' to {target}? ",
             force=force,
         )
+    if health_timeout_seconds <= 0:
+        raise typer.BadParameter("--health-timeout-seconds must be greater than zero.")
+    normalized_health_check = (
+        health_check_command.strip() if health_check_command is not None else None
+    )
+    if normalized_health_check == "":
+        normalized_health_check = None
+    if execute and normalized_health_check is None:
+        raise _cli_error(
+            "AUTOSD-HEALTH-CHECK-REQUIRED",
+            "execute deploy requires --health-check-command",
+            "Provide a deterministic health check command and optional timeout.",
+        )
     orchestrator = _create_deployment_orchestrator(registry_path)
     try:
         result = orchestrator.deploy(
@@ -357,6 +387,8 @@ def deploy_project(
             target=target,
             strategy=strategy,
             execute=execute,
+            health_check_command=normalized_health_check,
+            health_timeout_seconds=health_timeout_seconds,
         )
     except KeyError as exc:
         raise typer.BadParameter(str(exc.args[0])) from exc
@@ -389,6 +421,8 @@ def deploy_project(
             "target": target,
             "strategy": strategy,
             "scaffold_only": result.scaffold_only,
+            "health_check_command": normalized_health_check,
+            "health_timeout_seconds": health_timeout_seconds,
         },
     )
     if not result.success:

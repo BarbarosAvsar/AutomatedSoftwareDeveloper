@@ -65,6 +65,8 @@ Destructive actions prompt for confirmation unless `--force` is provided:
 
 ```bash
 autosd deploy --project my-project --env prod --target docker --preauth-grant <grant_id> --force
+autosd deploy --project my-project --env staging --target generic_container --execute \
+  --health-check-command "python -m pytest -q tests/smoke" --health-timeout-seconds 180 --force
 autosd rollback --project my-project --env staging --target generic_container --force
 autosd promote --project my-project --from staging --to prod --target generic_container --force
 ```
@@ -135,6 +137,8 @@ Run the full generator + conformance gate in one step:
 ```bash
 autosd verify-factory
 autosd verify-factory --strict-readiness
+autosd verify-factory --conformance-provider openai --real-provider-required \
+  --smoke-fixtures cli_tool,api_service,web_app
 ```
 
 The reports are written to `conformance/report.json` and `verify_factory_report.json`.
@@ -184,6 +188,8 @@ Track these baseline service indicators for autonomous runs and incident handlin
   - **SLO target**: >= 95% over rolling 7 days.
 - **Verification Pass SLI**: percentage of release-gated checks (`ruff`, `mypy`, `pytest`, `verify-factory`) that pass on first attempt.
   - **SLO target**: >= 90% over rolling 14 days.
+- **Real-Provider First-Pass SLI**: percentage of first-pass real-provider smoke fixture successes.
+  - **SLO target**: >= 95% over rolling 14 days for `cli_tool`, `api_service`, `web_app`.
 - **Policy Enforcement SLI**: percentage of privileged operations that require and validate preauth grants when policy requires it.
   - **SLO target**: 100% (no bypasses).
 - **Incident Recovery SLI**: time-to-recovery for auto-heal or manual rollback from incident open to mitigated state.

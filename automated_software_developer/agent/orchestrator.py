@@ -527,6 +527,13 @@ class SoftwareDevelopmentAgent:
             findings = "\n".join(f"- {item}" for item in secret_findings)
             raise RuntimeError(f"Potential secrets detected in output project:\n{findings}")
 
+        readiness_level, blocking_reasons = self._build_readiness_assessment(
+            selected_mode=mode_decision.selected_mode,
+            platform_adapter_id=platform_plan.adapter_id,
+        )
+        validation_scope = ["generated_project", platform_plan.adapter_id]
+        validation_provider = self._validation_provider()
+
         manifest = BuildManifest(
             project_id=refined.project_name,
             version="0.1.0",
@@ -536,6 +543,10 @@ class SoftwareDevelopmentAgent:
             gate_results=self._serialize_gate_results(final_results),
             reproducible=self.config.reproducible,
             tool_versions=gather_tool_versions(),
+            readiness_level=readiness_level,
+            blocking_reasons=blocking_reasons,
+            validation_scope=validation_scope,
+            validation_provider=validation_provider,
         )
         write_build_manifest(workspace.base_dir, manifest)
         maybe_write_sbom(workspace.base_dir, mode=self.config.sbom_mode)
@@ -562,11 +573,6 @@ class SoftwareDevelopmentAgent:
                 playbook_path=Path(self.config.prompt_playbook_path),
                 changelog_path=Path(self.config.prompt_changelog_path),
             )
-
-        readiness_level, blocking_reasons = self._build_readiness_assessment(
-            selected_mode=mode_decision.selected_mode,
-            platform_adapter_id=platform_plan.adapter_id,
-        )
 
         return RunSummary(
             output_dir=workspace.base_dir,
@@ -619,6 +625,8 @@ class SoftwareDevelopmentAgent:
             execution_mode_reason=mode_decision.reason,
             readiness_level=readiness_level,
             blocking_reasons=blocking_reasons,
+            validation_scope=validation_scope,
+            validation_provider=validation_provider,
         )
 
     def _run_planning_only(
@@ -642,6 +650,7 @@ class SoftwareDevelopmentAgent:
             selected_mode=mode_decision.selected_mode,
             platform_adapter_id=None,
         )
+        validation_provider = self._validation_provider()
         return RunSummary(
             output_dir=output_dir.resolve(),
             project_name=str(project_name),
@@ -657,6 +666,8 @@ class SoftwareDevelopmentAgent:
             execution_mode_reason=mode_decision.reason,
             readiness_level=readiness_level,
             blocking_reasons=blocking_reasons,
+            validation_scope=["planning_only"],
+            validation_provider=validation_provider,
         )
 
     def _apply_workspace_verification_defaults(
@@ -759,6 +770,17 @@ class SoftwareDevelopmentAgent:
             )
         readiness_level = "release_candidate" if not blocking_reasons else "needs_attention"
         return readiness_level, blocking_reasons
+
+    def _validation_provider(self) -> str:
+        """Resolve canonical provider label for run summary/provenance artifacts."""
+        class_name = self.provider.__class__.__name__.lower()
+        if "openai" in class_name:
+            return "openai"
+        if "resilient" in class_name:
+            return "resilient"
+        if "mock" in class_name:
+            return "mock"
+        return class_name
 
     def _prefetch_story_prompts(
         self,

@@ -136,6 +136,8 @@ def test_orchestrator_story_retry_and_artifacts(tmp_path: Path) -> None:
     assert summary.tasks_completed == 1
     assert summary.readiness_level == "needs_attention"
     assert any("strict_readiness_disabled" in item for item in summary.blocking_reasons)
+    assert summary.validation_provider == "mock"
+    assert "generated_project" in summary.validation_scope
     assert (tmp_path / "artifact.txt").read_text(encoding="utf-8").strip() == "ok"
     assert (tmp_path / "README.md").exists()
     assert (tmp_path / ".autosd" / "refined_requirements.md").exists()
@@ -165,6 +167,15 @@ def test_orchestrator_story_retry_and_artifacts(tmp_path: Path) -> None:
     assert progress["architecture_components"] == ".autosd/architecture/components.json"
     assert progress["architecture_adrs"] == ".autosd/architecture/adrs"
     assert isinstance(progress["platform_adapter_id"], str)
+
+    build_manifest = json.loads(
+        (tmp_path / ".autosd" / "provenance" / "build_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert build_manifest["readiness_level"] == summary.readiness_level
+    assert build_manifest["validation_provider"] == "mock"
+    assert "generated_project" in build_manifest["validation_scope"]
 
     journal_lines = (
         (tmp_path / ".autosd" / "prompt_journal.jsonl").read_text(encoding="utf-8").splitlines()

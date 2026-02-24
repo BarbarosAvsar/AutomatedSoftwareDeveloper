@@ -574,3 +574,5 @@ class RunSummary:
     execution_mode_reason: str | None = None
     readiness_level: str = "unknown"
     blocking_reasons: list[str] = field(default_factory=list)
+    validation_scope: list[str] = field(default_factory=list)
+    validation_provider: str = "unknown"

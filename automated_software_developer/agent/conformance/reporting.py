@@ -60,6 +60,7 @@ class FixtureResult:
     output_dir: str
     gates: list[GateResult]
     diff: DiffResult | None = None
+    flaky_retries: int = 0
 
     @property
     def passed(self) -> bool:
@@ -73,6 +74,7 @@ class FixtureResult:
             "adapter_id": self.adapter_id,
             "output_dir": self.output_dir,
             "passed": self.passed,
+            "flaky_retries": self.flaky_retries,
             "gates": [gate.to_dict() for gate in self.gates],
         }
         if self.diff is not None:
@@ -94,6 +96,14 @@ class ConformanceReport:
         """Return whether every fixture passed."""
         return all(fixture.passed for fixture in self.fixtures)
 
+    @property
+    def pass_rate(self) -> float:
+        """Return fixture pass rate in [0, 1]."""
+        if not self.fixtures:
+            return 0.0
+        passed = sum(1 for item in self.fixtures if item.passed)
+        return passed / len(self.fixtures)
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize the report as JSON-ready dict."""
         return {
@@ -101,6 +111,7 @@ class ConformanceReport:
             "finished_at": self.finished_at,
             "duration_seconds": round(self.duration_seconds, 4),
             "passed": self.passed,
+            "pass_rate": round(self.pass_rate, 4),
             "fixtures": [fixture.to_dict() for fixture in self.fixtures],
         }
 
@@ -141,6 +152,8 @@ def validate_report_payload(payload: dict[str, Any]) -> None:
     missing = required_top - set(payload)
     if missing:
         raise ValueError(f"Conformance report missing keys: {sorted(missing)}")
+    if "pass_rate" in payload and not isinstance(payload["pass_rate"], (int, float)):
+        raise ValueError("pass_rate must be a number when provided.")
     if not isinstance(payload["fixtures"], list):
         raise ValueError("fixtures must be a list.")
     for fixture in payload["fixtures"]:

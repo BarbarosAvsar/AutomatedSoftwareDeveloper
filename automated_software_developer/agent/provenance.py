@@ -25,6 +25,10 @@ class BuildManifest:
     tool_versions: dict[str, str]
     policy_snapshot_hash: str | None = None
     grant_id: str | None = None
+    readiness_level: str = "unknown"
+    blocking_reasons: list[str] | None = None
+    validation_scope: list[str] | None = None
+    validation_provider: str = "unknown"
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize build manifest object."""
@@ -39,6 +43,10 @@ class BuildManifest:
             "tool_versions": self.tool_versions,
             "policy_snapshot_hash": self.policy_snapshot_hash,
             "grant_id": self.grant_id,
+            "readiness_level": self.readiness_level,
+            "blocking_reasons": self.blocking_reasons or [],
+            "validation_scope": self.validation_scope or [],
+            "validation_provider": self.validation_provider,
         }
 
 
