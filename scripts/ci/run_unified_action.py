@@ -33,6 +33,7 @@ TOKEN_PATTERNS = (
     re.compile(r"github_pat_[A-Za-z0-9_]{30,}"),
     re.compile(r"(?i)(bearer\s+)[A-Za-z0-9\-._~+/]+=*"),
 )
+TRUTHY_VALUES = {"1", "true", "yes", "on"}
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,28 @@ def _github_metadata() -> dict[str, str]:
         "branch": os.environ.get("GITHUB_REF_NAME", ""),
         "sha7": sha[:7],
     }
+
+
+def _is_truthy(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in TRUTHY_VALUES
+
+
+def _real_provider_smoke_enabled() -> bool:
+    explicit = os.environ.get("AUTOSD_CI_REAL_PROVIDER_SMOKE")
+    if _is_truthy(explicit):
+        return True
+    event_name = os.environ.get("GITHUB_EVENT_NAME", "").strip().lower()
+    return event_name == "schedule" and bool(os.environ.get("OPENAI_API_KEY"))
+
+
+def _real_provider_smoke_blocking() -> bool:
+    explicit = os.environ.get("AUTOSD_CI_REAL_PROVIDER_SMOKE_REQUIRED")
+    if explicit is not None:
+        return _is_truthy(explicit)
+    event_name = os.environ.get("GITHUB_EVENT_NAME", "").strip().lower()
+    return event_name == "schedule"
 
 
 def _collect_secret_values() -> list[str]:
@@ -413,7 +436,16 @@ def run_unified_action(
         ),
         StageConfig(
             name="install_deps",
-            command=(sys.executable, "-m", "pip", "install", "-e", ".[dev,security]"),
+            command=(
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "-r",
+                "requirements-dev.lock",
+                "-e",
+                ".",
+            ),
         ),
         StageConfig(
             name="verify_factory",
@@ -434,6 +466,23 @@ def run_unified_action(
             },
         ),
     ]
+    if stages is None and _real_provider_smoke_enabled():
+        smoke_command: tuple[str, ...] = (
+            sys.executable,
+            "scripts/ci/run_real_provider_smoke.py",
+            "--output-dir",
+            "conformance/output-real-provider",
+            "--report-path",
+            "conformance/report-real-provider.json",
+            "--strict-readiness",
+        )
+        configured_stages.append(
+            StageConfig(
+                name="real_provider_smoke",
+                command=smoke_command,
+                blocking=_real_provider_smoke_blocking(),
+            )
+        )
 
     try:
         for stage in configured_stages:

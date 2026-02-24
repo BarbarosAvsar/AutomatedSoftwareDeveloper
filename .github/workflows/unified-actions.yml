@@ -64,6 +64,8 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       - name: Upload unified CI artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -76,6 +78,7 @@ jobs:
             .autosd/ci/failure_ledger.jsonl
             verify_factory_report.json
             conformance/report.json
+            conformance/report-real-provider.json
           if-no-files-found: ignore
       - name: Fail workflow when blocking stages failed
         run: |

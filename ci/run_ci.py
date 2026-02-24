@@ -7,6 +7,8 @@ import subprocess  # nosec B404
 import sys
 from collections.abc import Sequence
 
+from automated_software_developer.agent.readiness import generator_gate_commands
+
 
 def _run(args: Sequence[str]) -> int:
     """Run one command and return its exit code."""
@@ -20,19 +22,16 @@ def _run(args: Sequence[str]) -> int:
 
 def main() -> int:
     """Execute the canonical CI gate sequence."""
-    commands: list[list[str]] = [
-        [sys.executable, "-m", "ruff", "check", "."],
-        [sys.executable, "-m", "mypy", "automated_software_developer"],
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "--cov=automated_software_developer",
-            "--cov-report=term-missing",
-            "--cov-fail-under=79",
-        ],
-        [sys.executable, "-m", "pip_audit", "--progress-spinner", "off"],
+    commands: list[list[str]] = generator_gate_commands(python_executable=sys.executable)
+    commands[-1] = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "--cov=automated_software_developer",
+        "--cov-report=term-missing",
+        "--cov-fail-under=79",
     ]
+    commands.append([sys.executable, "-m", "pip_audit", "--progress-spinner", "off"])
     for args in commands[:-1]:
         exit_code = _run(args)
         if exit_code != 0:

@@ -89,6 +89,12 @@ from automated_software_developer.agent.providers.base import LLMProvider
 from automated_software_developer.agent.providers.mock_provider import MockProvider
 from automated_software_developer.agent.providers.openai_provider import OpenAIProvider
 from automated_software_developer.agent.providers.resilient_llm import ResilientLLM
+from automated_software_developer.agent.readiness import (
+    DoctorReport,
+    build_doctor_report,
+    generator_gate_commands,
+    strict_readiness_issues,
+)
 from automated_software_developer.agent.telemetry.policy import TelemetryPolicy
 from automated_software_developer.agent.telemetry.store import TelemetryStore
 from automated_software_developer.logging_utils import configure_logging
@@ -212,6 +218,26 @@ def _validate_execution_mode(value: str) -> str:
         return validate_execution_mode(value)
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
+
+
+def _enforce_strict_readiness(
+    *,
+    provider: str,
+    quality_gates: bool,
+    enable_security_scan: bool,
+    security_scan_mode: str,
+) -> None:
+    """Raise CLI validation error when strict readiness preflight fails."""
+    issues = strict_readiness_issues(
+        provider=provider,
+        quality_gates=quality_gates,
+        enable_security_scan=enable_security_scan,
+        security_scan_mode=security_scan_mode,
+    )
+    if not issues:
+        return
+    joined = "\n- ".join(issues)
+    raise typer.BadParameter(f"Strict readiness checks failed:\n- {joined}")
 
 
 def _run_gate_command(args: list[str]) -> tuple[bool, float]:

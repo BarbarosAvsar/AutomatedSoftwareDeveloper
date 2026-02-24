@@ -55,4 +55,6 @@ def test_auto_mode_runs_planning_only(tmp_path: Path) -> None:
     assert summary.requested_execution_mode == "auto"
     assert summary.tasks_completed == 0
     assert summary.verification_results == []
+    assert summary.readiness_level == "planning_only"
+    assert any("planning_only_mode" in reason for reason in summary.blocking_reasons)
     assert (tmp_path / ".autosd" / "sprints").exists()

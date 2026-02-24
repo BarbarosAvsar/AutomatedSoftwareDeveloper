@@ -26,6 +26,7 @@ from automated_software_developer.agent.conformance.reporting import (
 )
 from automated_software_developer.agent.orchestrator import AgentConfig, SoftwareDevelopmentAgent
 from automated_software_developer.agent.platforms.catalog import adapter_catalog
+from automated_software_developer.agent.providers.base import LLMProvider
 from automated_software_developer.agent.providers.mock_provider import MockProvider
 from automated_software_developer.agent.reproducibility import build_artifact_checksums
 
@@ -37,10 +38,12 @@ class ConformanceConfig:
     output_dir: Path
     report_path: Path
     provider: str = "mock"
+    model: str = "gpt-5.3-codex"
     conformance_seed: int = 4242
     reproducible: bool = True
     diff_check: bool = True
     max_workers: int = 3
+    strict_readiness: bool = False
 
 
 def run_conformance_suite(
@@ -131,15 +134,23 @@ def _generate_project(
 ) -> GateResult:
     """Generate a project for the fixture using the selected provider."""
     requirements_text = fixture.requirements_path.read_text(encoding="utf-8")
-    responses = json.loads(fixture.mock_responses_path.read_text(encoding="utf-8"))
+    provider: LLMProvider
+    if cfg.provider == "mock":
+        responses = json.loads(fixture.mock_responses_path.read_text(encoding="utf-8"))
+        provider = MockProvider(responses)
+    elif cfg.provider == "openai":
+        from automated_software_developer.agent.providers.openai_provider import OpenAIProvider
 
-    if cfg.provider != "mock":
-        raise ValueError("Only mock provider is supported in conformance suite.")
-    provider = MockProvider(responses)
+        provider = OpenAIProvider(model=cfg.model, max_retries=4)
+    else:
+        raise ValueError(
+            f"Unsupported provider '{cfg.provider}'. Allowed providers: mock, openai."
+        )
     config = AgentConfig(
         reproducible=cfg.reproducible,
         prompt_seed_base=cfg.conformance_seed,
         security_scan_mode=fixture.security_scan_mode,
+        strict_readiness=cfg.strict_readiness,
     )
     agent = SoftwareDevelopmentAgent(provider=provider, config=config)
 

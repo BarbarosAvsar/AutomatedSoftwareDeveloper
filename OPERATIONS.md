@@ -122,16 +122,32 @@ python -m mypy automated_software_developer
 python -m pytest
 ```
 
+For reproducible local tooling, bootstrap with pinned dependencies:
+
+```bash
+python -m pip install -r requirements-dev.lock -e .
+```
+
 ## Factory Release Gate
 
 Run the full generator + conformance gate in one step:
 
 ```bash
 autosd verify-factory
+autosd verify-factory --strict-readiness
 ```
 
 The reports are written to `conformance/report.json` and `verify_factory_report.json`.
 Use `--verbose` for additional debug logging in `autosd.log`.
+
+## Environment Doctor
+
+Use doctor to fail fast on missing dependencies and environment prerequisites:
+
+```bash
+autosd doctor
+autosd doctor --require-openai-key
+```
 
 ### CI Troubleshooting
 

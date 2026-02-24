@@ -7,7 +7,7 @@ Autonomous software-factory agent for requirements refinement, planning, impleme
 1) Install:
 
 ```bash
-python -m pip install -e .[dev]
+python -m pip install -r requirements-dev.lock -e .
 ```
 
 2) Run an end-to-end workflow:
@@ -66,7 +66,7 @@ Planning mode stages:
 ## Installation
 
 ```bash
-python -m pip install -e .[dev]
+python -m pip install -r requirements-dev.lock -e .
 ```
 
 Optional security extras:
@@ -81,6 +81,7 @@ python -m pip install -e .[security]
 
 ```bash
 autosd run --requirements-file requirements.md --output-dir output/project
+autosd run --requirements-file requirements.md --strict-readiness
 autosd refine --requirements-file requirements.md --output-dir output/refined-only
 autosd learn --journals output/project/.autosd/prompt_journal.jsonl --update-templates
 ```
@@ -88,6 +89,7 @@ autosd learn --journals output/project/.autosd/prompt_journal.jsonl --update-tem
 Useful `run` flags:
 
 - `--execution-mode direct|planning|auto`
+- `--strict-readiness/--allow-readiness-gaps`
 - `--preferred-platform web_app|api_service|cli_tool|desktop_app|mobile_app`
 - `--execute-packaging/--plan-packaging`
 - `--reproducible/--non-reproducible`
@@ -102,9 +104,17 @@ Useful `run` flags:
 
 ```bash
 autosd verify-factory
+autosd verify-factory --strict-readiness
 ```
 
 Runs repository quality gates, workflow lint, CI mirror execution, and conformance suite. Produces `conformance/report.json` and `verify_factory_report.json`.
+
+### Environment Doctor
+
+```bash
+autosd doctor
+autosd doctor --require-openai-key
+```
 
 ### Scrum Backlog & Sprint Automation
 
@@ -207,6 +217,7 @@ GitHub Actions model:
   - `.autosd/ci/failure_ledger.jsonl`
   - `verify_factory_report.json`
   - `conformance/report.json`
+  - `conformance/report-real-provider.json` (nightly real-provider smoke, when configured)
 - Failed runs are also indexed in persistent GitHub issue: `CI Failure Dashboard` (label `ci-failures`, latest 30 failures)
 
 ## Observability & Logs

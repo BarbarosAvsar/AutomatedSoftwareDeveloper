@@ -29,3 +29,9 @@ def test_verify_factory_help_returns_zero() -> None:
     result = _run("verify-factory", "--help")
     assert result.exit_code == 0
     assert "verify-factory" in result.stdout
+
+
+def test_doctor_help_returns_zero() -> None:
+    result = _run("doctor", "--help")
+    assert result.exit_code == 0
+    assert "doctor" in result.stdout

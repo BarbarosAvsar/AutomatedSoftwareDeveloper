@@ -128,3 +128,53 @@ def test_quality_gate_fingerprint_changes_when_files_change(tmp_path: Path) -> N
     file_path.write_text("print('changed')\n", encoding="utf-8")
     after = compute_quality_gate_fingerprint(tmp_path, commands=commands, config=config)
     assert before != after
+
+
+def test_quality_plan_strict_readiness_fails_when_quality_tool_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    (tmp_path / "app.py").write_text("def main():\n    return 1\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "automated_software_developer.agent.quality._module_available",
+        lambda module_name: module_name != "ruff",
+    )
+    try:
+        build_quality_gate_plan(
+            tmp_path,
+            enforce_quality_gates=True,
+            enable_security_scan=False,
+            security_scan_mode="off",
+            strict_readiness=True,
+        )
+    except RuntimeError as exc:
+        assert "strict readiness" in str(exc).lower()
+    else:
+        raise AssertionError("Expected strict readiness to fail when ruff is missing.")
+
+
+def test_quality_plan_strict_readiness_fails_when_bandit_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    (tmp_path / "app.py").write_text("def main():\n    return 1\n", encoding="utf-8")
+
+    def _module_available(module_name: str) -> bool:
+        return module_name != "bandit"
+
+    monkeypatch.setattr(
+        "automated_software_developer.agent.quality._module_available",
+        _module_available,
+    )
+    try:
+        build_quality_gate_plan(
+            tmp_path,
+            enforce_quality_gates=True,
+            enable_security_scan=True,
+            security_scan_mode="if-available",
+            strict_readiness=True,
+        )
+    except RuntimeError as exc:
+        assert "bandit" in str(exc).lower()
+    else:
+        raise AssertionError("Expected strict readiness to fail when bandit is missing.")

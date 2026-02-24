@@ -57,6 +57,7 @@ def execute_story_loop(
     enforce_quality_gates: bool,
     enable_security_scan: bool,
     security_scan_mode: str,
+    strict_readiness: bool,
     enforce_docstrings: bool,
     allow_stale_parallel_prompts: bool,
     apply_operations: ApplyOperationsFn,
@@ -115,6 +116,8 @@ def execute_story_loop(
                     user_prompt=user_prompt,
                     seed=prompt_seed,
                 )
+            if raw_response is None:
+                raise ValueError("Provider returned null response payload.")
             bundle = ExecutionBundle.from_dict(raw_response)
             apply_operations(bundle, workspace)
             quality_plan = build_quality_gate_plan(
@@ -122,6 +125,7 @@ def execute_story_loop(
                 enforce_quality_gates=enforce_quality_gates,
                 enable_security_scan=enable_security_scan,
                 security_scan_mode=security_scan_mode,
+                strict_readiness=strict_readiness,
             )
             quality_warnings = quality_plan.warnings
             quality_commands = dedupe_commands(

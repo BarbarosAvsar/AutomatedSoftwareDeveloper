@@ -82,6 +82,7 @@ def build_quality_gate_plan(
     enforce_quality_gates: bool,
     enable_security_scan: bool,
     security_scan_mode: str,
+    strict_readiness: bool = False,
 ) -> QualityGatePlan:
     """Build a deterministic quality gate command plan for the workspace."""
     if not enforce_quality_gates:
@@ -99,6 +100,15 @@ def build_quality_gate_plan(
             verification_commands=verification_commands,
             warnings=warnings,
         )
+
+    if strict_readiness:
+        missing = [name for name in ("ruff", "mypy", "pytest") if not _module_available(name)]
+        if missing:
+            raise RuntimeError(
+                "Strict readiness is enabled but required quality tools are missing: "
+                f"{', '.join(sorted(missing))}. "
+                "Install with `python -m pip install -e .[dev]`."
+            )
 
     verification_commands.insert(0, "python -m compileall -q .")
 
@@ -134,8 +144,11 @@ def build_quality_gate_plan(
                 "python -m bandit -q -r . -x "
                 "tests,./tests,.venv,./.venv,venv,./venv,.git,./.git,.autosd,./.autosd"
             )
-        elif security_scan_mode == "required":
-            raise RuntimeError("Security scan mode is 'required' but bandit is not installed.")
+        elif security_scan_mode == "required" or strict_readiness:
+            raise RuntimeError(
+                "Security scan requires `bandit`, but it is not installed. "
+                "Install with `python -m pip install -e .[security]`."
+            )
         else:
             warnings.append("bandit is not available; skipping optional security scan.")
 

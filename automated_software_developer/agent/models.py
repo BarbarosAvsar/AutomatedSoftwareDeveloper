@@ -265,7 +265,7 @@ class RefinedRequirements:
             "global_verification_commands",
         )
         if not verification_commands:
-            verification_commands = ["python -m pytest -q"]
+            verification_commands = ["python -m compileall -q .", "python -m pytest -q"]
 
         return cls(
             project_name=_require_string(data.get("project_name"), "project_name"),
@@ -572,3 +572,5 @@ class RunSummary:
     requested_execution_mode: str | None = None
     selected_execution_mode: str | None = None
     execution_mode_reason: str | None = None
+    readiness_level: str = "unknown"
+    blocking_reasons: list[str] = field(default_factory=list)

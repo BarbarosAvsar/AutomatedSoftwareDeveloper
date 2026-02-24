@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess  # nosec B404
 from pathlib import Path
 
 from automated_software_developer.agent.deploy.base import (
@@ -55,7 +57,7 @@ class GitHubPagesDeploymentTarget(DeploymentTarget):
         execute: bool,
     ) -> DeploymentResult:
         """Create GitHub Pages workflow and optionally execute via instructions."""
-        del execute, strategy
+        del strategy
         workflow_path = project_dir / ".github" / "workflows" / "deploy-pages.yml"
         workflow_path.parent.mkdir(parents=True, exist_ok=True)
         workflow_path.write_text(PAGES_WORKFLOW, encoding="utf-8")
@@ -64,6 +66,56 @@ class GitHubPagesDeploymentTarget(DeploymentTarget):
             index.write_text(
                 "<html><body><h1>Generated Site</h1></body></html>\n",
                 encoding="utf-8",
+            )
+        if execute:
+            gh_path = shutil.which("gh")
+            if gh_path is None:
+                return DeploymentResult(
+                    project_id=project_dir.name,
+                    environment=environment,
+                    target=self.target_id,
+                    success=False,
+                    version=version,
+                    message=(
+                        "Execution requested, but GitHub CLI (`gh`) is unavailable on PATH. "
+                        "Install gh and authenticate, or run without --execute."
+                    ),
+                    deployed_at=utc_now(),
+                    strategy="standard",
+                    scaffold_only=False,
+                )
+            dispatch = subprocess.run(  # nosec B603
+                [gh_path, "workflow", "run", "deploy-pages.yml"],
+                cwd=str(project_dir),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if dispatch.returncode != 0:
+                return DeploymentResult(
+                    project_id=project_dir.name,
+                    environment=environment,
+                    target=self.target_id,
+                    success=False,
+                    version=version,
+                    message=(
+                        "GitHub Pages workflow dispatch failed. "
+                        f"stdout={dispatch.stdout.strip()} stderr={dispatch.stderr.strip()}"
+                    ),
+                    deployed_at=utc_now(),
+                    strategy="standard",
+                    scaffold_only=False,
+                )
+            return DeploymentResult(
+                project_id=project_dir.name,
+                environment=environment,
+                target=self.target_id,
+                success=True,
+                version=version,
+                message="GitHub Pages workflow dispatched.",
+                deployed_at=utc_now(),
+                strategy="standard",
+                scaffold_only=False,
             )
         return DeploymentResult(
             project_id=project_dir.name,

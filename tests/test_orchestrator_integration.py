@@ -134,6 +134,8 @@ def test_orchestrator_story_retry_and_artifacts(tmp_path: Path) -> None:
     summary = agent.run(requirements="Create an artifact file containing ok", output_dir=tmp_path)
 
     assert summary.tasks_completed == 1
+    assert summary.readiness_level == "needs_attention"
+    assert any("strict_readiness_disabled" in item for item in summary.blocking_reasons)
     assert (tmp_path / "artifact.txt").read_text(encoding="utf-8").strip() == "ok"
     assert (tmp_path / "README.md").exists()
     assert (tmp_path / ".autosd" / "refined_requirements.md").exists()

@@ -323,8 +323,7 @@ class RequirementsRefiner:
         normalized.setdefault(
             "global_verification_commands",
             [
-                "python -m ruff check .",
-                "python -m mypy automated_software_developer",
+                "python -m compileall -q .",
                 "python -m pytest",
             ],
         )

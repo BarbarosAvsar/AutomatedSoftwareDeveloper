@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -166,6 +166,7 @@ class AgentConfig:
     parallel_prompt_workers: int = 1
     allow_stale_parallel_prompts: bool = False
     execution_mode: str = "direct"
+    strict_readiness: bool = False
 
     def __post_init__(self) -> None:
         """Validate configuration values eagerly."""
@@ -326,8 +327,7 @@ class SoftwareDevelopmentAgent:
             template=refinement_template,
             seed=prompt_seed,
         )
-        refined_markdown = refined.to_markdown()
-        workspace.write_file(self.config.refined_spec_file, refined_markdown)
+        workspace.write_file(self.config.refined_spec_file, refined.to_markdown())
 
         architecture_plan = self.architecture_planner.create_plan(
             refined=refined,
@@ -357,6 +357,15 @@ class SoftwareDevelopmentAgent:
         for relative_path, content in platform_plan.scaffold_files.items():
             if workspace.read_optional(relative_path) is None:
                 workspace.write_file(relative_path, content)
+
+        refined = self._apply_workspace_verification_defaults(
+            refined=refined,
+            workspace=workspace,
+            platform_adapter_id=platform_plan.adapter_id,
+            minimum_test_patterns=platform_plan.minimum_test_patterns,
+        )
+        refined_markdown = refined.to_markdown()
+        workspace.write_file(self.config.refined_spec_file, refined_markdown)
 
         backlog = self.planner_agent.create_backlog(refined)
         self._persist_backlog(workspace, backlog)
@@ -481,6 +490,7 @@ class SoftwareDevelopmentAgent:
             enforce_quality_gates=self.config.enforce_quality_gates,
             enable_security_scan=self.config.enable_security_scan,
             security_scan_mode=self.config.security_scan_mode,
+            strict_readiness=self.config.strict_readiness,
         )
         quality_commands = _dedupe_commands(
             [*final_quality_plan.format_commands, *final_quality_plan.verification_commands]
@@ -553,6 +563,11 @@ class SoftwareDevelopmentAgent:
                 changelog_path=Path(self.config.prompt_changelog_path),
             )
 
+        readiness_level, blocking_reasons = self._build_readiness_assessment(
+            selected_mode=mode_decision.selected_mode,
+            platform_adapter_id=platform_plan.adapter_id,
+        )
+
         return RunSummary(
             output_dir=workspace.base_dir,
             project_name=refined.project_name,
@@ -602,6 +617,8 @@ class SoftwareDevelopmentAgent:
             requested_execution_mode=mode_decision.requested_mode,
             selected_execution_mode=mode_decision.selected_mode,
             execution_mode_reason=mode_decision.reason,
+            readiness_level=readiness_level,
+            blocking_reasons=blocking_reasons,
         )
 
     def _run_planning_only(
@@ -621,6 +638,10 @@ class SoftwareDevelopmentAgent:
             for path in artifacts.values()
             if path.exists()
         ]
+        readiness_level, blocking_reasons = self._build_readiness_assessment(
+            selected_mode=mode_decision.selected_mode,
+            platform_adapter_id=None,
+        )
         return RunSummary(
             output_dir=output_dir.resolve(),
             project_name=str(project_name),
@@ -634,7 +655,110 @@ class SoftwareDevelopmentAgent:
             requested_execution_mode=mode_decision.requested_mode,
             selected_execution_mode=mode_decision.selected_mode,
             execution_mode_reason=mode_decision.reason,
+            readiness_level=readiness_level,
+            blocking_reasons=blocking_reasons,
         )
+
+    def _apply_workspace_verification_defaults(
+        self,
+        *,
+        refined: RefinedRequirements,
+        workspace: FileWorkspace,
+        platform_adapter_id: str,
+        minimum_test_patterns: list[str],
+    ) -> RefinedRequirements:
+        """Derive project-safe verification defaults from generated workspace metadata."""
+        commands = list(refined.global_verification_commands)
+        has_python_files = any(
+            path.suffix == ".py" and ".autosd" not in path.parts
+            for path in workspace.base_dir.rglob("*.py")
+        )
+        if has_python_files:
+            commands.append("python -m compileall -q .")
+            commands.append("python -m ruff check .")
+            if self._workspace_has_mypy_config(workspace.base_dir):
+                commands.append("python -m mypy .")
+        if self._workspace_has_test_targets(workspace.base_dir, minimum_test_patterns):
+            commands.append("python -m pytest -q")
+        commands.extend(self._adapter_behavioral_checks(platform_adapter_id))
+        resolved = _dedupe_commands(commands)
+        return replace(refined, global_verification_commands=resolved)
+
+    def _workspace_has_test_targets(self, project_dir: Path, patterns: list[str]) -> bool:
+        """Return whether generated workspace includes runnable test targets."""
+        tests_dir = project_dir / "tests"
+        if tests_dir.exists():
+            if any(tests_dir.rglob("test_*.py")):
+                return True
+            if any(tests_dir.rglob("*_test.py")):
+                return True
+            for pattern in patterns:
+                if any(project_dir.rglob(pattern)):
+                    return True
+        return any(any(project_dir.glob(pattern)) for pattern in ("test_*.py", "*_test.py"))
+
+    def _workspace_has_mypy_config(self, project_dir: Path) -> bool:
+        """Return whether generated workspace declares mypy configuration."""
+        mypy_ini = project_dir / "mypy.ini"
+        if mypy_ini.exists():
+            return True
+        setup_cfg = project_dir / "setup.cfg"
+        if setup_cfg.exists():
+            content = setup_cfg.read_text(encoding="utf-8", errors="ignore").lower()
+            if "[mypy" in content:
+                return True
+        pyproject = project_dir / "pyproject.toml"
+        if pyproject.exists():
+            content = pyproject.read_text(encoding="utf-8", errors="ignore").lower()
+            if "[tool.mypy]" in content:
+                return True
+        return False
+
+    def _adapter_behavioral_checks(self, adapter_id: str) -> list[str]:
+        """Return adapter-specific behavioral smoke checks."""
+        if adapter_id == "api_service":
+            return [
+                "python -c \"from pathlib import Path; import json; "
+                "spec=Path('api/openapi.json'); "
+                "json.loads(spec.read_text(encoding='utf-8')) if spec.exists() else None\""
+            ]
+        if adapter_id == "web_app":
+            return [
+                "python -c \"from pathlib import Path; page=Path('frontend/index.html'); "
+                "text=page.read_text(encoding='utf-8').lower() if page.exists() else ''; "
+                "assert (not page.exists()) or ('<html' in text and '</html>' in text)\""
+            ]
+        if adapter_id == "cli_tool":
+            return [
+                "python -c \"from pathlib import Path; cli=Path('cli'); "
+                "assert (not cli.exists()) or (cli / 'README.md').exists()\""
+            ]
+        return []
+
+    def _build_readiness_assessment(
+        self,
+        *,
+        selected_mode: str,
+        platform_adapter_id: str | None,
+    ) -> tuple[str, list[str]]:
+        """Build machine-readable readiness assessment for run summary."""
+        blocking_reasons: list[str] = []
+        if selected_mode == "planning":
+            blocking_reasons.append(
+                "planning_only_mode: implementation and verification stages were skipped."
+            )
+            return "planning_only", blocking_reasons
+        if platform_adapter_id in {"desktop_app", "mobile_app"}:
+            blocking_reasons.append(
+                "scaffold_only_platform: selected platform adapter does not "
+                "produce full runtime artifacts."
+            )
+        if not self.config.strict_readiness:
+            blocking_reasons.append(
+                "strict_readiness_disabled: optional tool gaps may be tolerated during execution."
+            )
+        readiness_level = "release_candidate" if not blocking_reasons else "needs_attention"
+        return readiness_level, blocking_reasons
 
     def _prefetch_story_prompts(
         self,
@@ -719,6 +843,7 @@ class SoftwareDevelopmentAgent:
             enforce_quality_gates=self.config.enforce_quality_gates,
             enable_security_scan=self.config.enable_security_scan,
             security_scan_mode=self.config.security_scan_mode,
+            strict_readiness=self.config.strict_readiness,
             enforce_docstrings=self.config.enforce_docstrings,
             allow_stale_parallel_prompts=self.config.allow_stale_parallel_prompts,
             apply_operations=self._apply_operations,
@@ -925,6 +1050,7 @@ class SoftwareDevelopmentAgent:
             "enforce_quality_gates": self.config.enforce_quality_gates,
             "enable_security_scan": self.config.enable_security_scan,
             "security_scan_mode": self.config.security_scan_mode,
+            "strict_readiness": self.config.strict_readiness,
             "enforce_docstrings": self.config.enforce_docstrings,
         }
         return run_quality_gate_commands(

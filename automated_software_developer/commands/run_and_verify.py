@@ -117,6 +117,16 @@ def run(
             help="Enable style/lint/type quality gates in story verification.",
         ),
     ] = True,
+    strict_readiness: Annotated[
+        bool,
+        typer.Option(
+            "--strict-readiness/--allow-readiness-gaps",
+            help=(
+                "Fail fast when required quality/security/provider dependencies are missing "
+                "instead of skipping checks."
+            ),
+        ),
+    ] = False,
     enforce_docstrings: Annotated[
         bool,
         typer.Option(
@@ -202,6 +212,13 @@ def run(
     security_scan_mode = _validate_security_scan_mode(security_scan_mode)
     sbom_mode = _validate_sbom_mode(sbom_mode)
     execution_mode = _validate_execution_mode(execution_mode)
+    if strict_readiness:
+        _enforce_strict_readiness(
+            provider=provider,
+            quality_gates=quality_gates,
+            enable_security_scan=security_scan,
+            security_scan_mode=security_scan_mode,
+        )
     if conformance_seed is not None:
         conformance_seed = _ensure_positive(conformance_seed, "conformance-seed")
     config = AgentConfig(
@@ -209,6 +226,7 @@ def run(
         command_timeout_seconds=timeout_seconds,
         max_stories_per_sprint=max_stories_per_sprint,
         enforce_quality_gates=quality_gates,
+        strict_readiness=strict_readiness,
         enforce_docstrings=enforce_docstrings,
         enable_security_scan=security_scan,
         security_scan_mode=security_scan_mode,
@@ -236,6 +254,9 @@ def run(
     table.add_row("Stories Completed", f"{summary.tasks_completed}/{summary.tasks_total}")
     table.add_row("Stack Rationale", summary.stack_rationale)
     table.add_row("Files Changed", str(len(summary.changed_files)))
+    table.add_row("Readiness Level", summary.readiness_level)
+    if summary.blocking_reasons:
+        table.add_row("Blocking Reasons", "; ".join(summary.blocking_reasons))
     if summary.refined_spec_path is not None:
         table.add_row("Refined Spec", str(summary.refined_spec_path))
     if summary.backlog_path is not None:
@@ -336,10 +357,27 @@ def verify_factory(
             help="Path to write the verify-factory report JSON.",
         ),
     ] = Path("verify_factory_report.json"),
+    strict_readiness: Annotated[
+        bool,
+        typer.Option(
+            "--strict-readiness/--allow-readiness-gaps",
+            help=(
+                "Fail fast when required quality/security dependencies are missing "
+                "instead of skipping checks."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Run generator and generated-project quality gates for release readiness."""
     conformance_seed = _ensure_positive(conformance_seed, "conformance-seed")
     max_workers = _ensure_positive(max_workers, "max-workers")
+    if strict_readiness:
+        _enforce_strict_readiness(
+            provider="mock",
+            quality_gates=True,
+            enable_security_scan=True,
+            security_scan_mode="required",
+        )
     verify_report: dict[str, Any] = {
         "timestamp": datetime.now(tz=UTC).isoformat(),
         "generator_gates": [],
@@ -348,11 +386,7 @@ def verify_factory(
         "conformance": {},
     }
     if not skip_generator_gates:
-        gates = [
-            ["python", "-m", "ruff", "check", "."],
-            ["python", "-m", "mypy", "automated_software_developer"],
-            ["python", "-m", "pytest"],
-        ]
+        gates = generator_gate_commands()
         for args in gates:
             command = " ".join(args)
             passed, duration = _run_gate_command(args)
@@ -400,6 +434,7 @@ def verify_factory(
             conformance_seed=conformance_seed,
             diff_check=diff_check,
             max_workers=max_workers,
+            strict_readiness=strict_readiness,
         )
     )
     status = "PASS" if report.passed else "FAIL"
@@ -412,6 +447,54 @@ def verify_factory(
     _write_verify_report(verify_report_path, verify_report)
     if not report.passed:
         raise typer.Exit(code=1)
+
+
+@app.command("doctor")
+def doctor(
+    include_security: Annotated[
+        bool,
+        typer.Option(
+            "--include-security/--skip-security",
+            help="Include security dependency checks (bandit/pip-audit).",
+        ),
+    ] = True,
+    require_openai_key: Annotated[
+        bool,
+        typer.Option(
+            "--require-openai-key/--allow-missing-openai-key",
+            help="Treat missing OPENAI_API_KEY as a blocking failure.",
+        ),
+    ] = False,
+) -> None:
+    """Run local environment readiness checks with actionable remediation."""
+    report = build_doctor_report(
+        include_security=include_security,
+        require_openai_key=require_openai_key,
+    )
+    table = Table(title="AutoSD Doctor")
+    table.add_column("Category")
+    table.add_column("Check")
+    table.add_column("Required")
+    table.add_column("Status")
+    table.add_column("Detail")
+    for item in report.checks:
+        status = "[green]PASS[/green]" if item.passed else "[red]FAIL[/red]"
+        table.add_row(
+            item.category,
+            item.name,
+            "yes" if item.required else "no",
+            status,
+            item.detail,
+        )
+    console.print(table)
+    if report.passed:
+        console.print("\nDoctor status: PASS")
+        return
+
+    console.print("\nDoctor status: FAIL")
+    for reason in report.blocking_reasons():
+        console.print(f"- {reason}")
+    raise typer.Exit(code=1)
 
 
 @app.command()
