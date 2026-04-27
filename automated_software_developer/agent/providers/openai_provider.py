@@ -159,7 +159,7 @@ class OpenAIProvider:
         }
         if resolved_seed is not None:
             payload["seed"] = resolved_seed
-        response = self.client.responses.create(**payload)  # type: ignore[attr-defined]
+        response = self.client.responses.create(**payload)  # type: ignore[call-overload]
         extracted = getattr(response, "output_text", None)
         if extracted:
             return str(extracted)

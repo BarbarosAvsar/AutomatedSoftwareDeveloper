@@ -35,3 +35,9 @@ def test_doctor_help_returns_zero() -> None:
     result = _run("doctor", "--help")
     assert result.exit_code == 0
     assert "doctor" in result.stdout
+
+
+def test_control_center_help_returns_zero() -> None:
+    result = _run("control-center", "--help")
+    assert result.exit_code == 0
+    assert "control-center" in result.stdout
