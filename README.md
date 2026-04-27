@@ -79,6 +79,31 @@ python -m pip install -r requirements-dev.lock -e .
 
 ## Core Commands
 
+### AutoSD Control Center (Local GUI)
+
+Launch the local browser UI (no extra dependencies required):
+
+```bash
+autosd control-center --host 127.0.0.1 --port 8787
+```
+
+Then open `http://127.0.0.1:8787` in your browser.
+
+Control Center pages included in this MVP:
+
+- **Onboarding**: first-run guidance and log file location.
+- **New Run**: wizard for requirements text/file path, output dir, execution mode, and collapsed advanced options.
+- **Run Monitor**: stage/status badges, progress indicator, redacted recent logs, and actionable errors.
+- **Results**: run summary and links to key `.autosd` artifacts.
+- **Operations**: one-click `autosd doctor` and `autosd verify-factory` with status/snippet output.
+- **History**: recent run records with status filter chips and search.
+
+Troubleshooting:
+
+- If the server does not start, verify the selected port is free and within `1..65535`.
+- If operations fail, inspect `autosd.log` and re-run with `autosd --verbose control-center`.
+- If run errors mention missing credentials, configure provider environment variables (for example `OPENAI_API_KEY`) or use `provider=mock`.
+
 ### Run / Refine / Learn
 
 ```bash

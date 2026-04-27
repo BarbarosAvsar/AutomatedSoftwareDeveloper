@@ -9,6 +9,7 @@ from automated_software_developer.commands.common import app
 from automated_software_developer.commands import (  # noqa: F401
     agile,
     ci_plugins_ui,
+    control_center,
     ops_release,
     preauth_policy,
     projects,
